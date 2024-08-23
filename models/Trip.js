@@ -62,6 +62,15 @@ const TripSchema = new mongoose.Schema({
     totalSeats: {
         type: Number,
         required: true
+    },
+    isRoundTrip: {
+        type: Boolean,
+        default: false
+    },
+    returnTripId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Trip',
+        default: null
     }
 }, {
     timestamps: true

@@ -30,8 +30,8 @@ exports.requestNewTrip = async (req, res) => {
 
 exports.handleTripRequest = async (req, res) => {
     try {
-        const { id } = req.params; // ID của yêu cầu mở chuyến đi
-        const { status } = req.body; // 'Approved' hoặc 'Rejected'
+        const { id } = req.params;
+        const { status } = req.body;
 
         const tripRequest = await TripRequest.findById(id);
 
@@ -43,7 +43,6 @@ exports.handleTripRequest = async (req, res) => {
         await tripRequest.save();
 
         if (status === 'Approved') {
-            // Tạo chuyến đi mới dựa trên yêu cầu
             const newTrip = new Trip({
                 departureLocation: tripRequest.departureLocation,
                 arrivalLocation: tripRequest.arrivalLocation,
@@ -51,7 +50,7 @@ exports.handleTripRequest = async (req, res) => {
                 arrivalTime: calculateArrivalTime(tripRequest.departureLocation, tripRequest.arrivalLocation),
                 busType: determineBusType(tripRequest.numberOfPassengers),
                 totalSeats: determineTotalSeats(tripRequest.numberOfPassengers),
-                basePrice: basePrice 
+                basePrice: basePrice
             });
 
             await newTrip.save();
@@ -63,12 +62,10 @@ exports.handleTripRequest = async (req, res) => {
     }
 };
 
-
-
 exports.createTrip = async (req, res) => {
     try {
-        const { departureLocation, arrivalLocation, departureTime,schedule, arrivalTime, busType, basePrice } = req.body;
-        
+        const { departureLocation, arrivalLocation, departureTime, schedule, arrivalTime, busType, basePrice, isRoundTrip, returnTripId } = req.body;
+
         const departureLoc = await Location.findById(departureLocation);
         const arrivalLoc = await Location.findById(arrivalLocation);
         const busTypeInfo = await BusType.findById(busType);
@@ -85,7 +82,9 @@ exports.createTrip = async (req, res) => {
             busType,
             schedule,
             totalSeats: busTypeInfo.seats,
-            basePrice
+            basePrice,
+            isRoundTrip: isRoundTrip || false,
+            returnTripId: returnTripId || null
         });
 
         await newTrip.save();
@@ -93,7 +92,7 @@ exports.createTrip = async (req, res) => {
         const seats = [];
         for (let i = 1; i <= busTypeInfo.seats; i++) {
             let seatPrice = basePrice;
-            if (i <= busTypeInfo.vipSeats) { 
+            if (i <= busTypeInfo.vipSeats) {
                 seatPrice += busTypeInfo.vipPrice;
             }
 
@@ -112,6 +111,7 @@ exports.createTrip = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to create trip', error: err.message });
     }
 };
+
 exports.getTrips = async (req, res) => {
     try {
         const { departureLocation, arrivalLocation, departureTimeRange, busType } = req.query;
@@ -160,54 +160,49 @@ exports.getTrips = async (req, res) => {
 
 exports.searchTrips = async (req, res) => {
     try {
-        const { departureLocation, arrivalLocation, departureTimeRange, busType } = req.query;
+        const { departureLocation, arrivalLocation, departureDate, returnDate } = req.query;
 
         let filter = {};
 
-        // Handle departureLocation by name
         if (departureLocation) {
-            const departureLoc = await Location.findOne({ name: departureLocation });
-            if (departureLoc) {
-                filter.departureLocation = departureLoc._id;
-            } else {
-                return res.status(404).json({ success: false, message: 'Departure location not found' });
-            }
+            filter.departureLocation = departureLocation;
         }
 
-        // Handle arrivalLocation by name
         if (arrivalLocation) {
-            const arrivalLoc = await Location.findOne({ name: arrivalLocation });
-            if (arrivalLoc) {
-                filter.arrivalLocation = arrivalLoc._id;
-            } else {
-                return res.status(404).json({ success: false, message: 'Arrival location not found' });
-            }
+            filter.arrivalLocation = arrivalLocation;
         }
 
-        if (departureTimeRange) {
-            const [startTime, endTime] = departureTimeRange.split(',');
+        if (departureDate) {
             filter.departureTime = {
-                $gte: new Date(startTime),
-                $lte: new Date(endTime)
+                $gte: new Date(departureDate),
             };
         }
 
-        if (busType) {
-            filter.busType = busType;
-        }
-
-        const trips = await Trip.find(filter)
-            .populate('departureLocation')
-            .populate('arrivalLocation')
-            .populate('busType')
+        const departureTrips = await Trip.find(filter)
+            .populate('departureLocation arrivalLocation busType')
             .exec();
 
-        res.status(200).json({ success: true, data: trips });
+        let returnTrips = [];
+
+        if (returnDate) {
+            const returnFilter = {
+                departureLocation: arrivalLocation,
+                arrivalLocation: departureLocation,
+                departureTime: {
+                    $gte: new Date(returnDate),
+                },
+            };
+
+            returnTrips = await Trip.find(returnFilter)
+                .populate('departureLocation arrivalLocation busType')
+                .exec();
+        }
+
+        res.status(200).json({ success: true, data: { departureTrips, returnTrips } });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Failed to get trips', error: err.message });
     }
 };
-
 
 exports.getTripById = async (req, res) => {
     try {
