@@ -4,62 +4,7 @@ const BusType = require('../models/BusType');
 const Seat = require('../models/Seat');
 const Pricing = require('../models/Pricing');
 const { calculateTripPrice } = require('./PricingController');
-const TripRequest = require('../models/TripRequest');
-
-exports.requestNewTrip = async (req, res) => {
-    try {
-        const { departureLocation, arrivalLocation, requestedDate, numberOfPassengers } = req.body;
-        const userId = req.user._id;
-
-        const newTripRequest = new TripRequest({
-            user: userId,
-            departureLocation,
-            arrivalLocation,
-            requestedDate,
-            numberOfPassengers
-        });
-
-        await newTripRequest.save();
-
-        res.status(201).json({ success: true, data: newTripRequest });
-    } catch (err) {
-        res.status(500).json({ success: false, message: 'Failed to request new trip', error: err.message });
-    }
-};
-
-exports.handleTripRequest = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { status } = req.body;
-
-        const tripRequest = await TripRequest.findById(id);
-
-        if (!tripRequest) {
-            return res.status(404).json({ success: false, message: 'Trip request not found' });
-        }
-
-        tripRequest.status = status;
-        await tripRequest.save();
-
-        if (status === 'Approved') {
-            const newTrip = new Trip({
-                departureLocation: tripRequest.departureLocation,
-                arrivalLocation: tripRequest.arrivalLocation,
-                departureTime: tripRequest.requestedDate,
-                arrivalTime: calculateArrivalTime(tripRequest.departureLocation, tripRequest.arrivalLocation),
-                busType: determineBusType(tripRequest.numberOfPassengers),
-                totalSeats: determineTotalSeats(tripRequest.numberOfPassengers),
-                basePrice: basePrice
-            });
-
-            await newTrip.save();
-        }
-
-        res.status(200).json({ success: true, data: tripRequest });
-    } catch (err) {
-        res.status(500).json({ success: false, message: 'Failed to handle trip request', error: err.message });
-    }
-};
+const moment = require('moment-timezone');
 
 exports.createTrip = async (req, res) => {
     try {
@@ -73,22 +18,29 @@ exports.createTrip = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid location or bus type' });
         }
 
-        // Tạo chuyến đi ban đầu
+        // Ensure the departureTime and arrivalTime are properly formatted
+        const departureTimeDate = moment(departureTime, moment.ISO_8601, true).tz('Asia/Ho_Chi_Minh').toDate();
+        const arrivalTimeDate = moment(arrivalTime, moment.ISO_8601, true).tz('Asia/Ho_Chi_Minh').toDate();
+
+        if (!departureTimeDate || !arrivalTimeDate || isNaN(departureTimeDate.getTime()) || isNaN(arrivalTimeDate.getTime())) {
+            return res.status(400).json({ success: false, message: 'Invalid date format' });
+        }
+
         const newTrip = new Trip({
             departureLocation,
             arrivalLocation,
-            departureTime,
-            arrivalTime,
+            departureTime: departureTimeDate,
+            arrivalTime: arrivalTimeDate,
             busType,
             schedule,
-            totalSeats: totalSeats || busTypeInfo.seats, // Sử dụng tổng số ghế từ request hoặc từ loại xe buýt
+            totalSeats: totalSeats || busTypeInfo.seats, // Use totalSeats from request or busType default seats
             basePrice,
             isRoundTrip: isRoundTrip || false
         });
 
         await newTrip.save();
 
-        // Tạo ghế cho chuyến đi ban đầu
+        // Create seats for the trip
         const seats = [];
         for (let i = 1; i <= newTrip.totalSeats; i++) {
             let seatPrice = basePrice;
@@ -106,27 +58,30 @@ exports.createTrip = async (req, res) => {
         }
         await Seat.insertMany(seats);
 
-        // Nếu là chuyến đi khứ hồi, tạo chuyến đi liên kết
+        // If it's a round trip, create the return trip
         if (isRoundTrip) {
+            const returnDepartureTime = moment(arrivalTimeDate).add(1, 'hours').toDate();
+            const returnArrivalTime = moment(returnDepartureTime).add(9, 'hours').toDate(); // Assume 9 hours for the return trip
+
             const returnTrip = new Trip({
-                departureLocation: arrivalLocation, // Điểm đi là điểm đến của chuyến đi ban đầu
-                arrivalLocation: departureLocation, // Điểm đến là điểm đi của chuyến đi ban đầu
-                departureTime: new Date(arrivalTime).setHours(new Date(arrivalTime).getHours() + 1), // Thời gian khởi hành của chuyến đi khứ hồi
-                arrivalTime: new Date(arrivalTime).setHours(new Date(arrivalTime).getHours() + 9), // Giả định thời gian di chuyển của chuyến khứ hồi
+                departureLocation: arrivalLocation,
+                arrivalLocation: departureLocation,
+                departureTime: returnDepartureTime,
+                arrivalTime: returnArrivalTime,
                 busType,
-                schedule, // Bạn có thể thiết lập lịch trình khác cho chuyến khứ hồi nếu cần
-                totalSeats: totalSeats || busTypeInfo.seats, // Sử dụng tổng số ghế từ request hoặc từ loại xe buýt
+                schedule,
+                totalSeats: totalSeats || busTypeInfo.seats,
                 basePrice,
-                returnTripId: newTrip._id // Liên kết ngược lại với chuyến đi ban đầu
+                returnTripId: newTrip._id
             });
 
             await returnTrip.save();
 
-            // Cập nhật chuyến đi ban đầu với returnTripId
+            // Update the original trip with the return trip ID
             newTrip.returnTripId = returnTrip._id;
             await newTrip.save();
 
-            // Tạo ghế cho chuyến đi khứ hồi
+            // Create seats for the return trip
             const returnSeats = [];
             for (let i = 1; i <= returnTrip.totalSeats; i++) {
                 let seatPrice = basePrice;
@@ -147,11 +102,10 @@ exports.createTrip = async (req, res) => {
 
         res.status(201).json({ success: true, data: newTrip });
     } catch (err) {
+        console.error('Error creating trip:', err);
         res.status(500).json({ success: false, message: 'Failed to create trip', error: err.message });
     }
 };
-
-
 exports.getTrips = async (req, res) => {
     try {
         const { departureLocation, arrivalLocation, departureTimeRange, busType } = req.query;
@@ -197,43 +151,72 @@ exports.getTrips = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to get trips', error: err.message });
     }
 };
+
 exports.searchTrips = async (req, res) => {
     try {
-        const { departureLocation, arrivalLocation, departureDate, returnDate } = req.query;
+        const { departureLocation, arrivalLocation, departureDate, returnDate, ticketCount } = req.query;
+
+        // Tìm kiếm địa điểm khởi hành và đến từ cơ sở dữ liệu
+        const departureLoc = departureLocation ? await Location.findOne({ name: departureLocation.trim() }) : null;
+        const arrivalLoc = arrivalLocation ? await Location.findOne({ name: arrivalLocation.trim() }) : null;
+
+        if ((departureLocation && !departureLoc) || (arrivalLocation && !arrivalLoc)) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy địa điểm' });
+        }
 
         let filter = {};
 
-        if (departureLocation) {
-            filter.departureLocation = departureLocation;
+        if (departureLoc) {
+            filter.departureLocation = departureLoc._id;
         }
 
-        if (arrivalLocation) {
-            filter.arrivalLocation = arrivalLocation;
+        if (arrivalLoc) {
+            filter.arrivalLocation = arrivalLoc._id;
         }
 
         if (departureDate) {
+            const startOfDay = new Date(departureDate);
+            startOfDay.setHours(0, 0, 0, 0);
+
+            const endOfDay = new Date(departureDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
             filter.departureTime = {
-                $gte: new Date(departureDate),
+                $gte: startOfDay,
+                $lte: endOfDay
             };
         }
 
-        // Tìm kiếm chuyến đi chính
+        // Tìm kiếm chuyến đi chính (chiều đi)
         const departureTrips = await Trip.find(filter)
             .populate('departureLocation arrivalLocation busType')
             .exec();
 
         let returnTrips = [];
 
-        // Tìm kiếm chuyến đi khứ hồi nếu có
-        if (departureTrips.length > 0 && returnDate) {
+        // Nếu có ngày về hoặc chuyến khứ hồi, tìm kiếm chuyến về
+        if (departureTrips.length > 0) {
             const returnTripIds = departureTrips.map(trip => trip.returnTripId).filter(id => id != null);
 
-            if (returnTripIds.length > 0) {
+            if (returnDate) {
+                const startOfReturnDay = new Date(returnDate);
+                startOfReturnDay.setHours(0, 0, 0, 0);
+
+                const endOfReturnDay = new Date(returnDate);
+                endOfReturnDay.setHours(23, 59, 59, 999);
+
                 returnTrips = await Trip.find({
                     _id: { $in: returnTripIds },
                     departureTime: {
-                        $gte: new Date(returnDate),
-                    },
+                        $gte: startOfReturnDay,
+                        $lte: endOfReturnDay
+                    }
+                })
+                .populate('departureLocation arrivalLocation busType')
+                .exec();
+            } else if (returnTripIds.length > 0) {
+                returnTrips = await Trip.find({
+                    _id: { $in: returnTripIds }
                 })
                 .populate('departureLocation arrivalLocation busType')
                 .exec();
@@ -242,9 +225,10 @@ exports.searchTrips = async (req, res) => {
 
         res.status(200).json({ success: true, data: { departureTrips, returnTrips } });
     } catch (err) {
-        res.status(500).json({ success: false, message: 'Failed to get trips', error: err.message });
+        res.status(500).json({ success: false, message: 'Không thể tìm thấy chuyến đi', error: err.message });
     }
 };
+
 exports.getTripById = async (req, res) => {
     try {
         const { id } = req.params;

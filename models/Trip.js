@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const moment = require('moment-timezone');
 
 const ScheduleSchema = new mongoose.Schema({
     stopName: {
@@ -33,11 +34,17 @@ const TripSchema = new mongoose.Schema({
     departureTime: {
         type: Date,
         required: true,
+        default: function() {
+            return moment().tz('Asia/Ho_Chi_Minh').toDate();
+        },
         index: true
     },
     arrivalTime: {
         type: Date,
         required: true,
+        default: function() {
+            return moment().tz('Asia/Ho_Chi_Minh').toDate();
+        },
         index: true
     },
     busType: {
@@ -74,6 +81,14 @@ const TripSchema = new mongoose.Schema({
     }
 }, {
     timestamps: true
+});
+
+TripSchema.virtual('departureTimeLocal').get(function() {
+    return moment(this.departureTime).tz('Asia/Ho_Chi_Minh').format('HH:mm:ss');
+});
+
+TripSchema.virtual('arrivalTimeLocal').get(function() {
+    return moment(this.arrivalTime).tz('Asia/Ho_Chi_Minh').format('HH:mm:ss');
 });
 
 const Trip = mongoose.model('Trip', TripSchema);
