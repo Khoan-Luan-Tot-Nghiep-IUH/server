@@ -2,15 +2,16 @@ const mongoose = require('mongoose');
 const Trip = require('../models/Trip');
 const Seat = require('../models/Seat');
 const Booking = require('../models/Booking');
-
+const { calculateTripPrice } = require('./PricingController');
 exports.createBooking = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        const { tripId, seatNumbers } = req.body;
+        const { tripId, seatNumbers, includeReturnTrip, returnSeatNumbers } = req.body;
         const userId = req.user._id;
 
+        // Xử lý đặt vé cho chuyến đi chính
         const trip = await Trip.findById(tripId).session(session);
         if (!trip) {
             throw new Error('Trip not found');
@@ -27,7 +28,6 @@ exports.createBooking = async (req, res) => {
             throw new Error('One or more seats are no longer available');
         }
 
-        // Tính toán giá vé dựa trên pricing
         const price = await calculateTripPrice(tripId, new Date());
 
         await Seat.updateMany(
@@ -46,6 +46,48 @@ exports.createBooking = async (req, res) => {
             }).save({ session })
         ));
 
+        // Xử lý đặt vé cho chuyến về (nếu có)
+        if (includeReturnTrip && trip.isRoundTrip && trip.returnTripId) {
+            const returnTripId = trip.returnTripId;
+            const returnTrip = await Trip.findById(returnTripId).session(session);
+
+            if (!returnTrip) {
+                throw new Error('Return trip not found');
+            }
+
+            // Nếu người dùng không chỉ định ghế cho lượt về, sử dụng ghế của lượt đi
+            const finalReturnSeatNumbers = returnSeatNumbers && returnSeatNumbers.length > 0 ? returnSeatNumbers : seatNumbers;
+
+            const returnSeats = await Seat.find({
+                trip: returnTripId,
+                seatNumber: { $in: finalReturnSeatNumbers },
+                isAvailable: true,
+                isReserved: false
+            }).session(session);
+
+            if (returnSeats.length !== finalReturnSeatNumbers.length) {
+                throw new Error('One or more return seats are no longer available');
+            }
+
+            const returnPrice = await calculateTripPrice(returnTripId, new Date());
+
+            await Seat.updateMany(
+                { _id: { $in: returnSeats.map(seat => seat._id) } },
+                { $set: { isAvailable: false, bookedBy: userId } },
+                { session }
+            );
+
+            await Promise.all(returnSeats.map(seat =>
+                new Booking({
+                    user: userId,
+                    trip: returnTripId,
+                    seatNumber: seat.seatNumber,
+                    price: returnPrice,
+                    status: 'Confirmed'
+                }).save({ session })
+            ));
+        }
+
         await session.commitTransaction();
         session.endSession();
 
@@ -53,7 +95,7 @@ exports.createBooking = async (req, res) => {
             req.io.emit('seatsBooked', {
                 tripId,
                 seatNumbers,
-                availableSeats: seats.length - seatNumbers.length
+                availableSeats: trip.totalSeats - seatNumbers.length
             });
         }
 

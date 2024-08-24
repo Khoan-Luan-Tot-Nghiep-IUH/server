@@ -21,23 +21,26 @@ exports.createPricing = async (req, res) => {
     }
 };
 
-
 exports.calculateTripPrice = async (tripId, bookingDate) => {
     try {
+        // Lấy thông tin chuyến đi
+        const trip = await Trip.findById(tripId);
+        if (!trip) {
+            throw new Error('Trip not found');
+        }
+
+        // Lấy giá cơ bản từ trip
+        let finalPrice = trip.basePrice;
+
+        // Kiểm tra xem có pricing nào đang có hiệu lực không
         const pricing = await Pricing.findOne({
             trip: tripId,
             effectiveDate: { $lte: bookingDate },
             endDate: { $gte: bookingDate }
         });
 
-        if (!pricing) {
-            throw new Error('No pricing available for the selected trip');
-        }
-
-        let finalPrice = pricing.price;
-        
-        // Áp dụng chiết khấu theo phần trăm
-        if (pricing.discount > 0) {
+        // Nếu có, áp dụng chiết khấu
+        if (pricing && pricing.discount > 0) {
             finalPrice = finalPrice - (finalPrice * (pricing.discount / 100));
         }
 

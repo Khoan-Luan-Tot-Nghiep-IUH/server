@@ -5,7 +5,6 @@ const Seat = require('../models/Seat');
 const Pricing = require('../models/Pricing');
 const { calculateTripPrice } = require('./PricingController');
 const TripRequest = require('../models/TripRequest');
-const { calculateArrivalTime, determineBusType, determineTotalSeats } = require('../utils/tripUtils');
 
 exports.requestNewTrip = async (req, res) => {
     try {
@@ -198,7 +197,6 @@ exports.getTrips = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to get trips', error: err.message });
     }
 };
-
 exports.searchTrips = async (req, res) => {
     try {
         const { departureLocation, arrivalLocation, departureDate, returnDate } = req.query;
@@ -219,25 +217,27 @@ exports.searchTrips = async (req, res) => {
             };
         }
 
-        // Tìm kiếm chuyến đi đi
+        // Tìm kiếm chuyến đi chính
         const departureTrips = await Trip.find(filter)
             .populate('departureLocation arrivalLocation busType')
             .exec();
 
         let returnTrips = [];
 
-        // Nếu có khứ hồi, tìm kiếm chuyến đi khứ hồi dựa trên returnTripId
-        if (returnDate) {
-            const returnFilter = {
-                departureTime: {
-                    $gte: new Date(returnDate),
-                },
-                _id: { $in: departureTrips.map(trip => trip.returnTripId).filter(id => id !== null) } // Lọc theo returnTripId
-            };
+        // Tìm kiếm chuyến đi khứ hồi nếu có
+        if (departureTrips.length > 0 && returnDate) {
+            const returnTripIds = departureTrips.map(trip => trip.returnTripId).filter(id => id != null);
 
-            returnTrips = await Trip.find(returnFilter)
+            if (returnTripIds.length > 0) {
+                returnTrips = await Trip.find({
+                    _id: { $in: returnTripIds },
+                    departureTime: {
+                        $gte: new Date(returnDate),
+                    },
+                })
                 .populate('departureLocation arrivalLocation busType')
                 .exec();
+            }
         }
 
         res.status(200).json({ success: true, data: { departureTrips, returnTrips } });
