@@ -3,17 +3,18 @@ const BusType = require('../models/BusType');
 // Tạo loại xe buýt mới
 exports.createBusType = async (req, res) => {
     try {
-        const { name, description, seats } = req.body;
+        const { name, description, seats, floorCount } = req.body;
 
         // Kiểm tra dữ liệu đầu vào
-        if (!name || seats === undefined) {
-            return res.status(400).json({ success: false, message: 'Name and seats are required' });
+        if (!name || seats === undefined || seats <= 0) {
+            return res.status(400).json({ success: false, message: 'Name and a valid number of seats are required' });
         }
 
         const newBusType = new BusType({
             name,
             description,
-            seats
+            seats,
+            floorCount: floorCount || 1 // Mặc định là 1 tầng nếu không có giá trị
         });
 
         await newBusType.save();
@@ -23,17 +24,29 @@ exports.createBusType = async (req, res) => {
     }
 };
 
-// Lấy danh sách tất cả các loại xe buýt
+// Lấy danh sách tất cả các loại xe buýt với phân trang
 exports.getBusTypes = async (req, res) => {
     try {
-        const busTypes = await BusType.find();
-        res.status(200).json({ success: true, data: busTypes });
+        const { page = 1, limit = 10 } = req.query;
+
+        const busTypes = await BusType.find()
+            .limit(limit * 1)
+            .skip((page - 1) * limit)
+            .exec();
+
+        const count = await BusType.countDocuments();
+
+        res.status(200).json({
+            success: true,
+            data: busTypes,
+            totalPages: Math.ceil(count / limit),
+            currentPage: page
+        });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Failed to get bus types', error: err.message });
     }
 };
 
-// Lấy chi tiết một loại xe buýt cụ thể
 exports.getBusTypeById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -45,24 +58,24 @@ exports.getBusTypeById = async (req, res) => {
 
         res.status(200).json({ success: true, data: busType });
     } catch (err) {
-        res.status (500).json({ success: false, message: 'Failed to get bus type', error: err.message });
+        res.status(500).json({ success: false, message: 'Failed to get bus type', error: err.message });
     }
 };
 
-// Cập nhật thông tin loại xe buýt
 exports.updateBusType = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, seats } = req.body;
+        const { name, description, seats, floorCount } = req.body;
 
-        if (!name && !description && seats === undefined) {
+        if (!name && !description && seats === undefined && floorCount === undefined) {
             return res.status(400).json({ success: false, message: 'No fields to update' });
         }
 
         const updates = {};
         if (name !== undefined) updates.name = name;
         if (description !== undefined) updates.description = description;
-        if (seats !== undefined) updates.seats = seats;
+        if (seats !== undefined && seats > 0) updates.seats = seats;
+        if (floorCount !== undefined && floorCount > 0) updates.floorCount = floorCount;
 
         const updatedBusType = await BusType.findByIdAndUpdate(id, updates, { new: true });
 
@@ -76,10 +89,13 @@ exports.updateBusType = async (req, res) => {
     }
 };
 
-// Xóa loại xe buýt
 exports.deleteBusType = async (req, res) => {
     try {
         const { id } = req.params;
+        const associatedTrips = await Trip.find({ busType: id });
+        if (associatedTrips.length > 0) {
+            return res.status(400).json({ success: false, message: 'Cannot delete BusType associated with existing trips' });
+        }
 
         const deletedBusType = await BusType.findByIdAndDelete(id);
 
@@ -93,7 +109,6 @@ exports.deleteBusType = async (req, res) => {
     }
 };
 
-// Lấy danh sách tên của các loại xe buýt
 exports.getBusTypeNames = async (req, res) => {
     try {
         const busTypeNames = await BusType.find().select('name');

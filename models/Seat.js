@@ -22,6 +22,16 @@ const SeatSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
+    seatRow: {
+        type: String,
+        enum: ['Front', 'Middle', 'Back'], // Hàng đầu, giữa, cuối
+        required: true
+    },
+    floor: {
+        type: Number,
+        enum: [1, 2], // Tầng 1, tầng 2
+        required: true
+    },
     bookedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
@@ -33,3 +43,4 @@ SeatSchema.index({ trip: 1, seatNumber: 1 }, { unique: true });
 
 const Seat = mongoose.model('Seat', SeatSchema);
 module.exports = Seat;
+

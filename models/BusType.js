@@ -14,6 +14,10 @@ const BusTypeSchema = new mongoose.Schema({
         type: Number,
         required: true,
         min: 1 
+    },
+    floorCount: {
+        type: Number,
+        default: 1 // Số tầng của xe, mặc định là 1
     }
 });
 

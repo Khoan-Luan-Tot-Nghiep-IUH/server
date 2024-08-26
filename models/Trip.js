@@ -66,10 +66,6 @@ const TripSchema = new mongoose.Schema({
         enum: ['Scheduled', 'Ongoing', 'Delayed', 'Cancelled', 'Completed'],
         default: 'Scheduled'
     },
-    totalSeats: {
-        type: Number,
-        required: true
-    },
     isRoundTrip: {
         type: Boolean,
         default: false
