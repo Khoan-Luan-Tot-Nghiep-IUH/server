@@ -5,6 +5,8 @@ const princingController = require('../controllers/PricingController');
 const authMiddleware = require('../middleware/authMiddleware');
 
 
+router.get('/trips/:tripId/seats', tripController.getSeatsByTripId);
+
 // Tạo chuyến đi mới (Yêu cầu quyền admin)
 router.post('/trips', authMiddleware.verifyToken, authMiddleware.isAdmin, tripController.createTrip);router.get('/trips', tripController.getTrips);
 router.get('/trips/search', tripController.searchTrips);
