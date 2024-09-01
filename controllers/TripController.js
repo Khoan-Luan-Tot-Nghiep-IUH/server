@@ -6,6 +6,34 @@ const Pricing = require('../models/Pricing');
 const { calculateTripPrice } = require('./PricingController');
 const moment = require('moment-timezone');
 
+
+exports.getSeatsByTripId = async (req, res) => {
+    try {
+        const { tripId } = req.params;
+
+        // Tìm danh sách ghế theo tripId
+        const seats = await Seat.find({ trip: tripId });
+
+        if (!seats.length) {
+            return res.status(404).json({ success: false, message: 'No seats found for this trip' });
+        }
+
+        // Phân loại ghế theo tầng
+        const lowerSeats = seats.filter(seat => seat.floor === 1);
+        const upperSeats = seats.filter(seat => seat.floor === 2);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                lower: lowerSeats,
+                upper: upperSeats
+            }
+        });
+    } catch (err) {
+        console.error('Error fetching seats:', err);
+        res.status(500).json({ success: false, message: 'Failed to fetch seats', error: err.message });
+    }
+};
 exports.createTrip = async (req, res) => {
     try {
         const { departureLocation, arrivalLocation, departureTime, schedule, arrivalTime, busType, basePrice, isRoundTrip } = req.body;
