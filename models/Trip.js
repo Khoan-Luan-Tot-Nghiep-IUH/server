@@ -80,12 +80,11 @@ const TripSchema = new mongoose.Schema({
 });
 
 TripSchema.virtual('departureTimeLocal').get(function() {
-    return moment(this.departureTime).tz('Asia/Ho_Chi_Minh').format('HH:mm:ss');
+    return moment(this.departureTime).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD HH:mm:ss');
 });
 
 TripSchema.virtual('arrivalTimeLocal').get(function() {
-    return moment(this.arrivalTime).tz('Asia/Ho_Chi_Minh').format('HH:mm:ss');
+    return moment(this.arrivalTime).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD HH:mm:ss');
 });
-
 const Trip = mongoose.model('Trip', TripSchema);
 module.exports = Trip;

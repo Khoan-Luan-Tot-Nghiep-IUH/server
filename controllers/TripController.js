@@ -188,7 +188,6 @@ exports.getTrips = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to get trips', error: err.message });
     }
 };
-
 exports.searchTrips = async (req, res) => {
     try {
         const { 
@@ -222,26 +221,27 @@ exports.searchTrips = async (req, res) => {
         if (arrivalLoc) {
             filter.arrivalLocation = arrivalLoc._id;
         }
-
         if (departureDate) {
-            const startOfDay = new Date(departureDate);
-            startOfDay.setHours(0, 0, 0, 0);
-
-            const endOfDay = new Date(departureDate);
-            endOfDay.setHours(23, 59, 59, 999);
-
+            // Sử dụng ngày UTC trực tiếp, không chuyển đổi múi giờ
+            const startOfDay = moment.utc(departureDate).startOf('day').toDate();
+            const endOfDay = moment.utc(departureDate).endOf('day').toDate();
+        
+            console.log("Start of Day (UTC):", startOfDay);
+            console.log("End of Day (UTC):", endOfDay);
+        
             filter.departureTime = {
                 $gte: startOfDay,
                 $lte: endOfDay
             };
-        }
-
+        
+            console.log("Filter (UTC):", filter);
+        }        
         // Lọc theo giờ khởi hành (departureTimeRange)
         if (departureTimeRange) {
             const [startTime, endTime] = departureTimeRange.split(',');
             filter.departureTime = {
-                $gte: new Date(startTime),
-                $lte: new Date(endTime)
+                $gte: moment.utc(startTime).toDate(),
+                $lte: moment.utc(endTime).toDate()
             };
         }
 
@@ -275,7 +275,6 @@ exports.searchTrips = async (req, res) => {
             .populate('departureLocation arrivalLocation busType')
             .exec();
 
-        // Đếm số ghế trống cho mỗi chuyến đi
         const tripIds = departureTrips.map(trip => trip._id);
         const seatCounts = await Seat.aggregate([
             { $match: { trip: { $in: tripIds }, isAvailable: true } },
@@ -298,11 +297,8 @@ exports.searchTrips = async (req, res) => {
 
         // Nếu có ngày về hoặc chuyến khứ hồi, tìm kiếm chuyến về
         if (departureTrips.length > 0 && returnDate) {
-            const startOfReturnDay = new Date(returnDate);
-            startOfReturnDay.setHours(0, 0, 0, 0);
-
-            const endOfReturnDay = new Date(returnDate);
-            endOfReturnDay.setHours(23, 59, 59, 999);
+            const startOfReturnDay = moment(returnDate).startOf('day').utc().toDate();
+            const endOfReturnDay = moment(returnDate).endOf('day').utc().toDate();
 
             const returnTripIds = departureTrips.map(trip => trip.returnTripId).filter(id => id != null);
             returnTrips = await Trip.find({
