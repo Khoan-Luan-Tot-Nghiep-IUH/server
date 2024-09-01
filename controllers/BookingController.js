@@ -34,7 +34,8 @@ exports.createBooking = async (req, res) => {
             throw new Error('One or more seats are no longer available');
         }
 
-        const price = await calculateTripPrice(tripId, new Date());
+        // Tính toán giá vé cho chuyến đi chính
+        const { finalPrice } = await calculateTripPrice(tripId, new Date());
 
         // Cập nhật trạng thái ghế
         await Seat.updateMany(
@@ -48,7 +49,7 @@ exports.createBooking = async (req, res) => {
                 user: userId,
                 trip: tripId,
                 seatNumber,
-                price, 
+                price: finalPrice, 
                 status: 'Confirmed'
             }).save({ session })
         ));
@@ -76,7 +77,7 @@ exports.createBooking = async (req, res) => {
                 throw new Error('One or more return seats are no longer available');
             }
 
-            const returnPrice = await calculateTripPrice(returnTripId, new Date());
+            const { finalPrice: returnPrice } = await calculateTripPrice(returnTripId, new Date());
 
             await Seat.updateMany(
                 { _id: { $in: returnSeats.map(seat => seat._id) } },
@@ -132,6 +133,7 @@ exports.createBooking = async (req, res) => {
         res.status(400).json({ success: false, message: error.message });
     }
 };
+
 exports.cancelBooking = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -169,7 +171,6 @@ exports.cancelBooking = async (req, res) => {
             seatNumber: booking.seatNumber,
             availableSeats: booking.trip.totalSeats - bookedSeatsCount
         });
-        
 
         return res.status(200).json({ success: true, message: 'Booking cancelled successfully', data: booking });
     } catch (error) {
@@ -178,6 +179,7 @@ exports.cancelBooking = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Failed to cancel booking', error: error.message });
     }
 };
+
 
 exports.getUserBookings = async (req, res) => {
     try {

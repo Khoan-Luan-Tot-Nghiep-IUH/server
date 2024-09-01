@@ -1,27 +1,13 @@
 const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
 
-const PricingSchema = new mongoose.Schema({
-    trip: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Trip',
-        required: true
-    },
-    price: {
-        type: Number,
-        required: true
-    },
-    effectiveDate: {
-        type: Date,
-        required: true
-    },
-    endDate: {
-        type: Date
-    },
-    discount: {
-        type: Number,
-        default: 0 
-    }
+const PricingSchema = new Schema({
+    trip: { type: Schema.Types.ObjectId, ref: 'Trip', required: true },
+    price: { type: Number, required: true },
+    effectiveDate: { type: Date, required: true },
+    endDate: { type: Date, required: true },
+    discount: { type: Number, required: true },
+    isActive: { type: Boolean, default: true }
 });
 
-const Pricing = mongoose.model('Pricing', PricingSchema);
-module.exports = Pricing;
+module.exports = mongoose.model('Pricing', PricingSchema);
