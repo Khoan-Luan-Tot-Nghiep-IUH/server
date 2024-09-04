@@ -5,7 +5,6 @@ const authMiddleware = require('../middleware/authMiddleware');
 module.exports = (io) => {
     const router = express.Router();
     const socketIoMiddleware = require('../middleware/socketIoMiddleware')(io);
-
     router.use(socketIoMiddleware);
 
     router.post('/bookings', authMiddleware.verifyToken, bookingController.createBooking);

@@ -3,7 +3,6 @@ const router = express.Router();
 const busTypeController = require('../controllers/BusTypeController');
 const authMiddleware = require('../middleware/authMiddleware');
 
-// Tạo loại xe buýt mới (Yêu cầu quyền admin)
 router.post('/bus-types', authMiddleware.verifyToken, authMiddleware.isAdmin, busTypeController.createBusType);
 
 // Lấy danh sách tất cả các loại xe buýt (public)
