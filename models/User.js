@@ -47,9 +47,16 @@ const UserSchema = new mongoose.Schema({
     },
     roleId: {
         type: String,
-        enum: ['admin', 'user', 'staff'],
+        enum: ['superadmin', 'companyadmin', 'staff', 'user'],
         default: 'user',
         required: true
+    },
+    companyId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Company',
+        required: function() {
+            return this.roleId !== 'superadmin' && this.roleId !== 'user';
+        }
     },
     address: {
         type: String,
