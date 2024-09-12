@@ -28,7 +28,6 @@ const companyController = {
         }
     },
 
-    // Lấy danh sách tất cả công ty (superadmin)
     getAllCompanies: async (req, res) => {
         try {
             const companies = await Company.find();
@@ -38,24 +37,29 @@ const companyController = {
         }
     },
 
-    // Xem chi tiết một công ty (superadmin hoặc companyadmin của công ty đó)
     getCompanyById: async (req, res) => {
         try {
-            const companyId = req.params.companyId;
-
-            // Lấy thông tin công ty theo ID
-            const company = await Company.findById(companyId).populate('companyAdmins staff', '-password');
-            if (!company) {
-                return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
+          const company = await Company.findById(req.params.companyId).populate('employees', '-password');
+      
+          if (!company) {
+            return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
+          }
+      
+          const companyAdmins = company.employees.filter(employee => employee.roleId === 'companyadmin');
+          const staff = company.employees.filter(employee => employee.roleId === 'staff');
+      
+          res.json({
+            success: true,
+            company: {
+              ...company.toObject(), 
+              companyAdmins,
+              staff,
             }
-
-            return res.status(200).json({ success: true, company });
+          });
         } catch (error) {
-            return res.status(500).json({ success: false, message: 'Lỗi khi lấy thông tin công ty.', error: error.message });
+          res.status(500).json({ success: false, message: 'Lỗi khi lấy thông tin công ty.', error: error.message });
         }
-    },
-
-    // Cập nhật thông tin công ty (superadmin hoặc companyadmin)
+      },
     updateCompany: async (req, res) => {
         try {
             const { companyId } = req.params;
