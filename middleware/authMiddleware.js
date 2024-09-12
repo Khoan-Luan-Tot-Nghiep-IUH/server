@@ -78,7 +78,6 @@ const authMiddleware = {
             res.status(403).json({ success: false, message: 'Yêu cầu quyền người dùng.' });
         }
     },
-
     isActiveUser: (req, res, next) => {
         if (req.user && req.user.isActive) {
             next();

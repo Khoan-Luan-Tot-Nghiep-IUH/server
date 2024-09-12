@@ -48,13 +48,6 @@ const io = socketIo(server, {
     }
 });
 
-// Socket.io Connection
-io.on('connection', (socket) => {
-    console.log('A user connected');
-    socket.on('disconnect', () => {
-        console.log('A user disconnected');
-    });
-});
 
 // Import Routes
 const routerUser = require('./routes/UserRoutes');
@@ -77,6 +70,12 @@ app.use('/api', feedbackRoutes);
 app.use('/api', seatRoutes); 
 app.use('/api',companyRoutes);
 
+io.on('connection', (socket) => {
+    console.log('A user connected');
+    socket.on('disconnect', () => {
+        console.log('A user disconnected');
+    });
+});
 const path = require('path');
 
 app.use(express.static(path.join(__dirname, 'build')));
