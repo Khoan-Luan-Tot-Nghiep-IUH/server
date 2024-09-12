@@ -4,6 +4,7 @@ const { generalAcesstoken } = require('../middleware/authMiddleware');
 const crypto = require('crypto');
 const { sendOrderConfirmationEmail } = require('../config/mailer');
 const moment = require('moment-timezone');
+const { validationResult } = require('express-validator');
 
 // Existing functions with updates
 const sendResetPasswordEmail = async (req, res) => {
@@ -69,6 +70,10 @@ const userRegister = async (req, res) => {
     try {
         const { email, userName, password, roleId, fullName, phoneNumber, address, birthDay } = req.body;
 
+        if (roleId === 'admin' || roleId === 'superadmin') {
+            return res.status(403).json({ success: false, msg: 'Bạn không thể tự đăng ký với vai trò này' });
+        }
+
         const existingUserByEmail = await User.findOne({ email });
         if (existingUserByEmail) {
             return res.status(400).json({ success: false, msg: 'Email đã được sử dụng' });
@@ -78,9 +83,7 @@ const userRegister = async (req, res) => {
         if (existingUserByUserName) {
             return res.status(400).json({ success: false, msg: 'Tên người dùng đã được sử dụng' });
         }
-
         const hashPass = await argon2.hash(password);
-
         const newUser = new User({
             userName,
             fullName,
@@ -244,6 +247,10 @@ const updateUserStatus = async (req, res) => {
     try {
         const { userId } = req.params;
         const { isActive } = req.body;
+        if (req.user.roleId !== 'superadmin' && req.user.roleId !== 'companyadmin') {
+            return res.status(403).json({ success: false, msg: 'Yêu cầu quyền Super Admin hoặc Admin nhà xe' });
+        }
+
         const updatedUser = await User.findByIdAndUpdate(userId, { isActive }, { new: true }).select('-password');
         if (!updatedUser) {
             return res.status(404).json({ success: false, msg: 'Không tìm thấy người dùng' });

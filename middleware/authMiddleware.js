@@ -41,19 +41,41 @@ const authMiddleware = {
         }
     },
 
-    isAdmin: (req, res, next) => {
-        if (req.user && req.user.roleId === 'admin') {
+    isSuperAdmin: (req, res, next) => {
+        if (req.user && req.user.roleId === 'superadmin') {
             next();
         } else {
-            res.status(403).json({ success: false, message: 'Quyền truy cập bị từ chối. Yêu cầu quyền admin.' });
+            res.status(403).json({ success: false, message: 'Yêu cầu quyền Super Admin.' });
+        }
+    },
+
+    isCompanyAdmin: (req, res, next) => {
+        if (req.user && req.user.roleId === 'companyadmin') {
+            next();
+        } else {
+            res.status(403).json({ success: false, message: 'Yêu cầu quyền Admin nhà xe.' });
         }
     },
 
     isStaffOrAdmin: (req, res, next) => {
-        if (req.user && (req.user.roleId === 'admin' || req.user.roleId === 'staff')) {
+        if (req.user && (req.user.roleId === 'companyadmin' || req.user.roleId === 'staff')) {
             next();
         } else {
-            res.status(403).json({ success: false, message: 'Quyền truy cập bị từ chối. Yêu cầu quyền staff hoặc admin.' });
+            res.status(403).json({ success: false, message: 'Yêu cầu quyền Staff hoặc Admin nhà xe.' });
+        }
+    },
+    isSuperAdminOrStaffOrAdmin: (req, res, next) => {
+        if (req.user && (req.user.roleId === 'superadmin' || req.user.roleId === 'companyadmin' || req.user.roleId === 'staff')) {
+            next();
+        } else {
+            res.status(403).json({ success: false, message: 'Yêu cầu quyền Superadmin, Admin hoặc Staff.' });
+        }
+    },
+    isUser: (req, res, next) => {
+        if (req.user && req.user.roleId === 'user') {
+            next();
+        } else {
+            res.status(403).json({ success: false, message: 'Yêu cầu quyền người dùng.' });
         }
     },
 

@@ -6,19 +6,14 @@ const authMiddleware = require('../middleware/authMiddleware');
 const { facebookLogin, facebookCallback } = require('../controllers/facebookAuthController');
 const passport = require('passport');
 
-router.get('/google', (req, res, next) => {
-  console.log("Starting Google OAuth process");
-  next();
-}, passport.authenticate('google', { scope: ['profile', 'email'] }));
+// Google Authentication Routes
+router.get('/google', 
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
 
 router.get('/google/callback',
-  (req, res, next) => {
-    console.log("Google OAuth callback triggered");
-    next();
-  },
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
   (req, res) => {
-    console.log("Google authentication successful");
     const token = jwt.sign({ id: req.user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
     res.redirect(`${process.env.CLIENT_URL}/login?token=${token}`);
   }
@@ -27,7 +22,6 @@ router.get('/google/callback',
 // Facebook Authentication Routes
 router.get('/facebook', facebookLogin);
 router.get('/facebook/callback', facebookCallback);
-
 
 // Public routes
 router.post('/register', userController.userRegister);
@@ -39,17 +33,25 @@ router.post('/reset-password/:token', userController.resetPassword);
 router.use(authMiddleware.verifyToken);
 
 // User-specific routes
-router.get('/profile/:userId', authMiddleware.isActiveUser, userController.getUserDetails);
-router.put('/profile/:userId', authMiddleware.isActiveUser, userController.updateUser);
-router.put('/change-password/:userId', authMiddleware.isActiveUser, userController.changePassword);
+router.get('/profile/:userId', authMiddleware.isActiveUser, authMiddleware.isUser, userController.getUserDetails);
+router.put('/profile/:userId', authMiddleware.isActiveUser, authMiddleware.isUser, userController.updateUser);
+router.put('/change-password/:userId', authMiddleware.isActiveUser, authMiddleware.isUser, userController.changePassword);
 
-// Các quyền dành cho admin
-router.use(authMiddleware.isAdmin);
+// Company Admin and Super Admin routes (Admin must be a company admin or superadmin)
+router.use(authMiddleware.isCompanyAdmin);
 
-router.get('/all', userController.getAllUsers);
-router.get('/role/:roleId', userController.getUsersByRole);
-router.put('/status/:userId', userController.updateUserStatus);
-router.put('/loyalty/:userId', userController.addLoyaltyPoints);
-router.get('/search', userController.searchUsers);
+// Routes accessible by company admin or superadmin
+router.get('/all', userController.getAllUsers); // Company admin can manage users within their company
+router.get('/role/:roleId', userController.getUsersByRole); // Company admin can filter users by role
+router.put('/status/:userId', userController.updateUserStatus); // Company admin can update user status
+router.put('/loyalty/:userId', userController.addLoyaltyPoints); // Company admin can manage loyalty points
+router.get('/search', userController.searchUsers); // Company admin can search users
+
+
+router.use(authMiddleware.isSuperAdmin);
+
+router.get('/superadmin', (req, res) => {
+  res.status(200).json({ message: 'Access granted to superadmin route' });
+});
 
 module.exports = router;
