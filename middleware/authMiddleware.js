@@ -64,7 +64,13 @@ const authMiddleware = {
             res.status(403).json({ success: false, message: 'Yêu cầu quyền Staff hoặc Admin nhà xe.' });
         }
     },
-
+    isSuperAdminOrStaffOrAdmin: (req, res, next) => {
+        if (req.user && (req.user.roleId === 'superadmin' || req.user.roleId === 'companyadmin' || req.user.roleId === 'staff')) {
+            next();
+        } else {
+            res.status(403).json({ success: false, message: 'Yêu cầu quyền Superadmin, Admin hoặc Staff.' });
+        }
+    },
     isUser: (req, res, next) => {
         if (req.user && req.user.roleId === 'user') {
             next();

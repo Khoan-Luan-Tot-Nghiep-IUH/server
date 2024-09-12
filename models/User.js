@@ -7,7 +7,6 @@ const UserSchema = new mongoose.Schema({
         trim: true,
         lowercase: true,
         required: function() {
-            // Chỉ yêu cầu userName khi không đăng nhập bằng Google
             return !this.googleId && !this.facebookId;
         },
         unique: true,
@@ -19,7 +18,6 @@ const UserSchema = new mongoose.Schema({
     },
     phoneNumber: {
         type: String,
-        // Chỉ yêu cầu phoneNumber khi không đăng nhập bằng Google
         required: function() {
             return !this.googleId && !this.facebookId;
         },
@@ -40,7 +38,6 @@ const UserSchema = new mongoose.Schema({
     password: {
         type: String,
         minlength: 8,
-        // Chỉ yêu cầu password khi không đăng nhập bằng Google
         required: function() {
             return !this.googleId && !this.facebookId;
         },

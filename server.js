@@ -64,6 +64,7 @@ const busTypeRoutes = require('./routes/BusTypeRoutes');
 const bookingRoutes = require('./routes/BookingRoutes')(io);
 const feedbackRoutes = require('./routes/FeedbackRoutes');
 const seatRoutes = require('./routes/SeatRoutes'); 
+const companyRoutes = require('./routes/CompanyRoutes');
 require('./utils/cron');
 
 // Routes
@@ -74,6 +75,7 @@ app.use('/api', busTypeRoutes);
 app.use('/api', bookingRoutes);
 app.use('/api', feedbackRoutes); 
 app.use('/api', seatRoutes); 
+app.use('/api',companyRoutes);
 
 const path = require('path');
 
