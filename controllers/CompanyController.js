@@ -1,33 +1,71 @@
 const Company = require('../models/Company');
 const User = require('../models/User');
+const bcrypt = require('bcryptjs');
 
 const companyController = {
-    // Tạo công ty mới (chỉ superadmin mới có thể thực hiện)
     createCompany: async (req, res) => {
         try {
-            const { name, address, contactInfo } = req.body;
-
-            // Kiểm tra xem công ty đã tồn tại chưa
+            const { name, address, contactInfo, phoneNumber, email, website } = req.body;
             const existingCompany = await Company.findOne({ name });
             if (existingCompany) {
-                return res.status(400).json({ success: false, message: 'Công ty đã tồn tại.' });
+                return res.status(400).json({ success: false, message: 'Công ty đã tồn tại với tên này.' });
             }
-
-            // Tạo công ty mới
             const newCompany = new Company({
                 name,
                 address,
-                contactInfo
+                contactInfo,
+                phoneNumber,
+                email,
+                website
             });
 
             await newCompany.save();
-
             return res.status(201).json({ success: true, message: 'Công ty đã được tạo thành công.', company: newCompany });
         } catch (error) {
             return res.status(500).json({ success: false, message: 'Lỗi khi tạo công ty.', error: error.message });
         }
     },
-
+    addCompanyAdmin: async (req, res) => {
+        try {
+            const { companyId, adminEmail, adminPassword } = req.body;
+    
+            // Kiểm tra sự tồn tại của công ty
+            const company = await Company.findById(companyId);
+            if (!company) {
+                return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
+            }
+    
+            // Kiểm tra nếu email đã được sử dụng
+            const existingUser = await User.findOne({ email: adminEmail });
+            if (existingUser) {
+                return res.status(400).json({ success: false, message: 'Email này đã được sử dụng.' });
+            }
+    
+            // Mã hóa mật khẩu
+            const hashedPassword = await bcrypt.hash(adminPassword, 10);
+            const newUser = new User({
+                userName: adminEmail, // Sử dụng email làm userName
+                email: adminEmail,
+                password: hashedPassword,
+                roleId: 'companyadmin',
+                companyId: companyId
+            });
+    
+            await newUser.save();
+    
+            // Thêm admin vào danh sách nhân viên của công ty
+            company.employees.push({
+                userId: newUser._id,
+                roleId: 'companyadmin'
+            });
+            await company.save();
+    
+            return res.status(201).json({ success: true, message: 'Tài khoản admin đã được tạo thành công.', user: newUser });
+        } catch (error) {
+            console.error(error); // Log lỗi để kiểm tra
+            return res.status(500).json({ success: false, message: 'Lỗi khi thêm admin cho công ty.', error: error.message });
+        }
+    },    
     getAllCompanies: async (req, res) => {
         try {
             const companies = await Company.find();
@@ -39,37 +77,40 @@ const companyController = {
 
     getCompanyById: async (req, res) => {
         try {
-          const company = await Company.findById(req.params.companyId).populate('employees', '-password');
-      
-          if (!company) {
-            return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
-          }
-      
-          const companyAdmins = company.employees.filter(employee => employee.roleId === 'companyadmin');
-          const staff = company.employees.filter(employee => employee.roleId === 'staff');
-      
-          res.json({
-            success: true,
-            company: {
-              ...company.toObject(), 
-              companyAdmins,
-              staff,
+            const company = await Company.findById(req.params.companyId).populate('employees.userId', '-password');
+            if (!company) {
+                return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
             }
-          });
+
+            const companyAdmins = company.employees.filter(employee => employee.roleId === 'companyadmin');
+            const staff = company.employees.filter(employee => employee.roleId === 'staff');
+
+            res.json({
+                success: true,
+                company: {
+                    ...company.toObject(),
+                    companyAdmins,
+                    staff,
+                }
+            });
         } catch (error) {
-          res.status(500).json({ success: false, message: 'Lỗi khi lấy thông tin công ty.', error: error.message });
+            return res.status(500).json({ success: false, message: 'Lỗi khi lấy thông tin công ty.', error: error.message });
         }
-      },
+    },
+
     updateCompany: async (req, res) => {
         try {
             const { companyId } = req.params;
-            const { name, address, contactInfo } = req.body;
+            const { name, address, contactInfo, phoneNumber, email, website } = req.body;
 
             // Tìm và cập nhật thông tin công ty
             const updatedCompany = await Company.findByIdAndUpdate(companyId, {
                 name,
                 address,
-                contactInfo
+                contactInfo,
+                phoneNumber,
+                email,
+                website
             }, { new: true });
 
             if (!updatedCompany) {
@@ -82,7 +123,6 @@ const companyController = {
         }
     },
 
-    // Vô hiệu hóa hoặc kích hoạt công ty (chỉ superadmin)
     toggleCompanyStatus: async (req, res) => {
         try {
             const { companyId } = req.params;

@@ -68,7 +68,7 @@ app.use('/api', busTypeRoutes);
 app.use('/api', bookingRoutes);
 app.use('/api', feedbackRoutes); 
 app.use('/api', seatRoutes); 
-app.use('/api',companyRoutes);
+app.use('/api/companies',companyRoutes);
 
 io.on('connection', (socket) => {
     console.log('A user connected');
