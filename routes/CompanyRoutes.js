@@ -1,17 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const authMiddleware = require('../middleware/authMiddleware');
 const companyController = require('../controllers/CompanyController');
+const authMiddleware = require('../middleware/authMiddleware');
+
+// Super Admin Routes
+router.post('/', authMiddleware.verifyToken, authMiddleware.isSuperAdmin, companyController.createCompany);
+router.post('/add-admin', authMiddleware.verifyToken, authMiddleware.isSuperAdmin, companyController.addCompanyAdmin);
+router.put('/:companyId', authMiddleware.verifyToken, authMiddleware.isSuperAdmin, companyController.updateCompany);
+router.patch('/:companyId/status', authMiddleware.verifyToken, authMiddleware.isSuperAdmin, companyController.toggleCompanyStatus);
 
 
-router.post('/companies/create',authMiddleware.verifyToken ,authMiddleware.isSuperAdmin, companyController.createCompany);
+//public routes
+router.get('/', authMiddleware.verifyToken, companyController.getAllCompanies);
+router.get('/:companyId', authMiddleware.verifyToken, companyController.getCompanyById);
 
-router.get('/companies/',authMiddleware.verifyToken, authMiddleware.isSuperAdmin, companyController.getAllCompanies);
-
-router.get('/companies/:companyId', authMiddleware.verifyToken,authMiddleware.isSuperAdminOrStaffOrAdmin, companyController.getCompanyById);
-
-router.put('/companies/:companyId',authMiddleware.verifyToken ,authMiddleware.isSuperAdminOrStaffOrAdmin, companyController.updateCompany);
-
-router.patch('/companies/:companyId/toggle-status',authMiddleware.verifyToken ,authMiddleware.isSuperAdmin, companyController.toggleCompanyStatus);
 
 module.exports = router;

@@ -4,7 +4,7 @@ const feedbackController = require('../controllers/FeedbackController');
 const authMiddleware = require('../middleware/authMiddleware');
 
 // Tạo phản hồi cho chuyến đi (Yêu cầu xác thực và là người dùng hợp lệ)
-router.post('/feedbacks', authMiddleware.verifyToken, authMiddleware.isActiveUser, feedbackController.createFeedback);
+router.post('/feedbacks', authMiddleware.verifyToken, feedbackController.createFeedback);
 
 // Lấy danh sách phản hồi theo chuyến đi (public)
 router.get('/feedbacks/trip/:tripId', feedbackController.getFeedbacksByTrip);
