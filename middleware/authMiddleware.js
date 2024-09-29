@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const generalAcesstoken = (user) => {
+const generateAccessToken = (user) => {
     return new Promise((resolve, reject) => {
         jwt.sign(
             user,
@@ -21,8 +21,7 @@ const generalAcesstoken = (user) => {
 const authMiddleware = {
     verifyToken: async (req, res, next) => {
         try {
-            const token = req.headers.authorization?.split(' ')[1] || req.cookies.access_token;
-
+            const token = req.headers.authorization?.split(' ')[1];
             if (!token) {
                 return res.status(401).json({ success: false, message: 'Không tìm thấy token xác thực' });
             }
@@ -86,7 +85,7 @@ const authMiddleware = {
         }
     },
 
-    generalAcesstoken
+    generateAccessToken
 };
 
 module.exports = authMiddleware;
