@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const argon2 = require('argon2');
-const { generalAcesstoken } = require('../middleware/authMiddleware');
+const { generalAcesstoken, generateAccessToken } = require('../middleware/authMiddleware');
 const crypto = require('crypto');
 const { sendOrderConfirmationEmail } = require('../config/mailer');
 const moment = require('moment-timezone');
@@ -115,7 +115,7 @@ const userLogin = async (req, res) => {
             return res.status(401).json({ success: false, msg: 'Mật khẩu không chính xác' });
         }
 
-        const accessToken = await generalAcesstoken({
+        const accessToken = await generateAccessToken({
             id: user._id,
             userName: user.userName,
             fullName: user.fullName,

@@ -1,6 +1,6 @@
+const argon2 = require('argon2');
 const Company = require('../models/Company');
 const User = require('../models/User');
-const bcrypt = require('bcryptjs');
 
 const companyController = {
     createCompany: async (req, res) => {
@@ -25,47 +25,63 @@ const companyController = {
             return res.status(500).json({ success: false, message: 'Lỗi khi tạo công ty.', error: error.message });
         }
     },
-    addCompanyAdmin: async (req, res) => {
+     addCompanyAdmin : async (req, res) => {
         try {
-            const { companyId, adminEmail, adminPassword } = req.body;
-    
-            // Kiểm tra sự tồn tại của công ty
+            const { companyId, userName, password, email, phoneNumber } = req.body;
+            if (!userName || !password || !email || !phoneNumber) {
+                return res.status(400).json({ success: false, message: 'Tên đăng nhập, mật khẩu, email và số điện thoại không được để trống.' });
+            }
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return res.status(400).json({ success: false, message: 'Định dạng email không hợp lệ.' });
+            }
+            const normalizedUserName = userName.trim().toLowerCase();
             const company = await Company.findById(companyId);
             if (!company) {
                 return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
             }
+            const [existingUser, existingEmail, existingPhone] = await Promise.all([
+                User.findOne({ userName: normalizedUserName }),
+                User.findOne({ email }),
+                User.findOne({ phoneNumber })
+            ]);
     
-            // Kiểm tra nếu email đã được sử dụng
-            const existingUser = await User.findOne({ email: adminEmail });
             if (existingUser) {
+                return res.status(400).json({ success: false, message: 'Tên đăng nhập này đã được sử dụng.' });
+            }
+            if (existingEmail) {
                 return res.status(400).json({ success: false, message: 'Email này đã được sử dụng.' });
             }
-    
-            // Mã hóa mật khẩu
-            const hashedPassword = await bcrypt.hash(adminPassword, 10);
+            if (existingPhone) {
+                return res.status(400).json({ success: false, message: 'Số điện thoại này đã được sử dụng.' });
+            }
+            const hashedPassword = await argon2.hash(password);
+            const fullName = `Admin ${company.name}`;
             const newUser = new User({
-                userName: adminEmail, // Sử dụng email làm userName
-                email: adminEmail,
+                userName: normalizedUserName,
                 password: hashedPassword,
+                email, 
+                phoneNumber, 
+                fullName: fullName,
                 roleId: 'companyadmin',
                 companyId: companyId
             });
-    
+
+            // Lưu user và cập nhật công ty
             await newUser.save();
-    
-            // Thêm admin vào danh sách nhân viên của công ty
             company.employees.push({
                 userId: newUser._id,
+                
                 roleId: 'companyadmin'
             });
             await company.save();
     
             return res.status(201).json({ success: true, message: 'Tài khoản admin đã được tạo thành công.', user: newUser });
         } catch (error) {
-            console.error(error); // Log lỗi để kiểm tra
+            console.error('Error when adding admin:', error);
             return res.status(500).json({ success: false, message: 'Lỗi khi thêm admin cho công ty.', error: error.message });
         }
-    },    
+    },
     getAllCompanies: async (req, res) => {
         try {
             const companies = await Company.find();
