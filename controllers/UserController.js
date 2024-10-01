@@ -136,7 +136,7 @@ const confirmRegistration = async (req, res) => {
         await newUser.save();
         await TempUser.deleteOne({ phoneNumber });
 
-        res.status(201).json({ success: true, msg: 'Đăng ký thành công' });
+        res.status(201).json({ success: true, msg: 'Đăng ký thành công' ,newUser });
     } catch (error) {
         res.status(500).json({ success: false, msg: 'Xác nhận đăng ký thất bại', error: error.message });
     }
