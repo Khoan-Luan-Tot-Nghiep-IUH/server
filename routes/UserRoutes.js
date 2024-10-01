@@ -25,6 +25,8 @@ router.get('/facebook/callback', facebookCallback);
 
 // Public routes
 router.post('/register', userController.userRegister);
+router.post('/verify', userController.confirmRegistration);
+
 router.post('/login', userController.userLogin);
 router.post('/forgot-password', userController.sendResetPasswordEmail);
 router.post('/reset-password/:token', userController.resetPassword);
