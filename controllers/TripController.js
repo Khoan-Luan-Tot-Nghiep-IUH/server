@@ -297,19 +297,15 @@ exports.searchTrips = async (req, res) => {
             const tripsWithPricing = await Pricing.find(pricingFilter).distinct('trip');
             filter._id = { $in: tripsWithPricing };
         }
-
-        // Tìm kiếm chuyến đi chính (chiều đi)
+        
         let departureTrips = await Trip.find(filter)
             .populate('departureLocation arrivalLocation busType')
             .exec();
-
         const tripIds = departureTrips.map(trip => trip._id);
         const seatCounts = await Seat.aggregate([
             { $match: { trip: { $in: tripIds }, isAvailable: true } },
             { $group: { _id: "$trip", availableSeats: { $sum: 1 } } }
         ]);
-
-        // Tạo bản đồ số ghế trống theo ID chuyến đi
         const availableSeatsMap = {};
         seatCounts.forEach(count => {
             availableSeatsMap[count._id] = count.availableSeats;

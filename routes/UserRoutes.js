@@ -14,9 +14,7 @@ router.get('/google',
 router.get('/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
   (req, res) => {
-    // Generate JWT token after successful Google login
-    const token = jwt.sign({ id: req.user._id, roleId: req.user.roleId }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    // Redirect to frontend with token
+    const token = jwt.sign({ id: req.user._id, roleId: req.user.roleId, email:req.user.email , fullName: req.user.fullName }, process.env.JWT_SECRET, { expiresIn: '24h' });
     res.redirect(`${process.env.CLIENT_URL}/login?token=${token}`);
   }
 );
@@ -35,8 +33,8 @@ router.post('/reset-password/:token', userController.resetPassword);
 router.use(authMiddleware.verifyToken);  // All routes below will require token
 
 // User-specific routes (Authenticated users)
-router.get('/profile/:userId', authMiddleware.isUser, userController.getUserDetails);
-router.put('/profile/:userId', authMiddleware.isUser, userController.updateUser);
+router.get('/profile/:userId',authMiddleware.verifyToken, authMiddleware.isUser, userController.getUserDetails);
+router.put('/profile/:userId',authMiddleware.verifyToken, authMiddleware.isUser, userController.updateUser);
 router.put('/change-password/:userId', authMiddleware.isUser, userController.changePassword);
 
 // Routes accessible by company admin or superadmin
