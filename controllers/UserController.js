@@ -5,8 +5,10 @@ const crypto = require('crypto');
 const { sendOrderConfirmationEmail } = require('../config/mailer');
 const moment = require('moment-timezone');
 const { validationResult } = require('express-validator');
+const {sendVerificationCode, verifyCode } = require('../config/twilioConfig');
+const TempUser = require('../models/TempUser');
 
-// Existing functions with updates
+
 const sendResetPasswordEmail = async (req, res) => {
     try {
         const { email } = req.body;
@@ -68,39 +70,79 @@ const userRegister = async (req, res) => {
     }
 
     try {
-        const { email, userName, password, roleId, fullName, phoneNumber, address, birthDay } = req.body;
+        const { email, userName, password, roleId, fullName, phoneNumber, address, birthDay}= req.body;
 
         if (roleId === 'admin' || roleId === 'superadmin') {
             return res.status(403).json({ success: false, msg: 'Bạn không thể tự đăng ký với vai trò này' });
         }
 
-        const existingUserByEmail = await User.findOne({ email });
+        const existingUserByEmail = await TempUser.findOne({ email });
         if (existingUserByEmail) {
             return res.status(400).json({ success: false, msg: 'Email đã được sử dụng' });
         }
 
-        const existingUserByUserName = await User.findOne({ userName });
+
+        const existingUserByUserName = await TempUser.findOne({ userName });
         if (existingUserByUserName) {
             return res.status(400).json({ success: false, msg: 'Tên người dùng đã được sử dụng' });
         }
-        const hashPass = await argon2.hash(password);
-        const newUser = new User({
+
+        const status = await sendVerificationCode(phoneNumber);
+
+        if (status !== 'pending') {
+            return res.status(500).json({ success: false, msg: 'Gửi mã xác nhận thất bại' });
+        }
+        const tempUser = new TempUser({
             userName,
             fullName,
             phoneNumber,
             email,
-            password: hashPass,
-            roleId: roleId || "user",
+            password: await argon2.hash(password),
             address,
             birthDay
         });
+        await tempUser.save();
+        res.status(201).json({ success: true, msg: 'Mã xác nhận đã được gửi. Vui lòng nhập mã để hoàn tất đăng ký.' });
 
-        await newUser.save();
-        res.status(201).json({ success: true, msg: 'Đăng ký thành công' });
     } catch (error) {
         res.status(500).json({ success: false, msg: 'Đăng ký thất bại', error: error.message });
     }
 };
+
+const confirmRegistration = async (req, res) => {
+    const { phoneNumber, verificationCode } = req.body;
+
+    try {
+        const status = await verifyCode(phoneNumber, verificationCode);
+        if (status !== 'approved') {
+            return res.status(400).json({ success: false, msg: 'Mã xác nhận không chính xác hoặc đã hết hạn' });
+        }
+        const tempUser = await TempUser.findOne({ phoneNumber });
+        if (!tempUser) {
+            return res.status(400).json({ success: false, msg: 'Số điện thoại không tồn tại' });
+        }
+
+        const newUser = new User({
+            userName: tempUser.userName,
+            fullName: tempUser.fullName,
+            phoneNumber: tempUser.phoneNumber,
+            email: tempUser.email,
+            password: tempUser.password,
+            roleId: tempUser.roleId,
+            address: tempUser.address,
+            birthDay: tempUser.birthDay
+        });
+
+        await newUser.save();
+        await TempUser.deleteOne({ phoneNumber });
+
+        res.status(201).json({ success: true, msg: 'Đăng ký thành công' });
+    } catch (error) {
+        res.status(500).json({ success: false, msg: 'Xác nhận đăng ký thất bại', error: error.message });
+    }
+};
+
+
 const userLogin = async (req, res) => {
     const { userName, password } = req.body;
 
@@ -328,5 +370,6 @@ module.exports = {
     getUsersByRole,
     updateUserStatus,
     addLoyaltyPoints,
-    searchUsers
+    searchUsers,
+    confirmRegistration
 };
