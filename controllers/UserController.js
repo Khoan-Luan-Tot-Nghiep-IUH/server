@@ -194,7 +194,10 @@ const changePassword = async (req, res) => {
 const updateUser = async (req, res) => {
     try {
         const userId = req.params.userId;
-        const { fullName, phoneNumber, email, address, birthDay } = req.body;
+        const { fullName, phoneNumber, email, address, birthDay ,roleId  } = req.body;
+        if (roleId === 'superadmin' || roleId === 'companyadmin') {
+            return res.status(403).json({ success: false, msg: 'Bạn không thể cập nhật vai trò này' });
+        }   
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ success: false, msg: 'Không tìm thấy người dùng' });
@@ -213,7 +216,8 @@ const updateUser = async (req, res) => {
                     phoneNumber: phoneNumber || user.phoneNumber,
                     email: email || user.email,
                     address: address || user.address,
-                    birthDay: birthDay || user.birthDay
+                    birthDay: birthDay || user.birthDay,
+                    roleId: roleId || user.roleId
                 }
             },
             { new: true }
