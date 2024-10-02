@@ -7,8 +7,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 // Lấy danh sách ghế của một chuyến đi (Public Access)
 router.get('/trips/:tripId/seats', tripController.getSeatsByTripId);
 
-// Tạo chuyến đi mới (Yêu cầu quyền Company Admin hoặc Super Admin)
-router.post('/trips', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, tripController.createTrip);
+router.post('/trips', authMiddleware.verifyToken, authMiddleware.isSuperAdminOrStaffOrAdmin, tripController.createTrip);
 
 // Lấy danh sách chuyến đi (Public Access)
 router.get('/trips', tripController.getTrips);
