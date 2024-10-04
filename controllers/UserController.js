@@ -185,7 +185,7 @@ const userLogin = async (req, res) => {
         });
 
         if (user.roleId === 'companyadmin' || user.roleId === 'staff') {
-            responseData.companyId = user.companyId; 
+            accessToken.companyId = user.companyId; 
         }
         res.status(200).json({
             success: true,
