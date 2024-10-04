@@ -149,14 +149,20 @@ const userLogin = async (req, res) => {
     try {
         const user = await User.findOne({ userName: userName });
         if (!user) {
-            return res.status(401).json({ success: false, msg: 'Tên người dùng không tồn tại' });
+            return res.status(401).json({
+                success: false,
+                msg: 'Tên người dùng không tồn tại. Vui lòng kiểm tra lại tên đăng nhập của bạn.',
+                errorType: 'user_not_found'
+            });
         }
-
         const validPassword = await argon2.verify(user.password, password);
         if (!validPassword) {
-            return res.status(401).json({ success: false, msg: 'Mật khẩu không chính xác' });
+            return res.status(401).json({
+                success: false,
+                msg: 'Mật khẩu không chính xác. Vui lòng thử lại.',
+                errorType: 'invalid_password'
+            });
         }
-
         const accessToken = await generateAccessToken({
             id: user._id,
             userName: user.userName,
@@ -165,7 +171,8 @@ const userLogin = async (req, res) => {
             email: user.email,
             roleId: user.roleId,
             address: user.address,
-            birthDay: user.birthDay
+            birthDay: user.birthDay,
+            companyId: user.companyId 
         });
 
         user.lastLogin = moment().tz("Asia/Ho_Chi_Minh").toDate();
@@ -176,13 +183,17 @@ const userLogin = async (req, res) => {
             sameSite: 'Strict',
             expires: new Date(Date.now() + 24 * 60 * 60 * 1000)
         });
+
+        if (user.roleId === 'companyadmin' || user.roleId === 'staff') {
+            responseData.companyId = user.companyId; 
+        }
         res.status(200).json({
             success: true,
             msg: 'Đăng nhập thành công',
             accessToken,
         });
     } catch (error) {
-        res.status(500).json({ success: false, msg: 'Đăng nhập thất bại', error: error.message });
+        res.status(500).json({ success: false, msg: 'Đăng nhập thất bại do lỗi máy chủ. Vui lòng thử lại sau.', error: error.message });
     }
 };
 
