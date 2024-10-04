@@ -3,7 +3,6 @@ require('dotenv').config();
 
 const client = new twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
-// Gửi mã OTP qua Twilio Verify
 const sendVerificationCode = async (phoneNumber) => {
     console.log("Verify Service SID:", process.env.TWILIO_VERIFY_SERVICE_SID);
     

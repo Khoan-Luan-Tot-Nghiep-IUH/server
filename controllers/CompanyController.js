@@ -158,7 +158,107 @@ const companyController = {
         } catch (error) {
             return res.status(500).json({ success: false, message: 'Lỗi khi thay đổi trạng thái công ty.', error: error.message });
         }
+    },
+     deleteCompany: async (req, res) => {
+        try {
+            const { companyId } = req.params;
+    
+            // Kiểm tra công ty có tồn tại không
+            const company = await Company.findById(companyId);
+            if (!company) {
+                return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
+            }
+
+            await User.deleteMany({ companyId: companyId });
+            await company.remove();
+    
+            return res.status(200).json({ success: true, message: 'Công ty đã được xóa thành công.' });
+        } catch (error) {
+            return res.status(500).json({ success: false, message: 'Lỗi khi xóa công ty.', error: error.message });
+        }
+    },
+    addStaff: async (req, res) => {
+        try {
+            const { companyId, userName, password, email, phoneNumber } = req.body;
+            if (!userName || !password || !email || !phoneNumber) {
+                return res.status(400).json({ success: false, message: 'Tên đăng nhập, mật khẩu, email và số điện thoại không được để trống.' });
+            }
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return res.status(400).json({ success: false, message: 'Định dạng email không hợp lệ.' });
+            }
+    
+            const company = await Company.findById(companyId);
+            if (!company) {
+                return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
+            }
+            const [existingUser, existingEmail, existingPhone] = await Promise.all([
+                User.findOne({ userName: userName.trim().toLowerCase() }),
+                User.findOne({ email }),
+                User.findOne({ phoneNumber })
+            ]);
+    
+            if (existingUser || existingEmail || existingPhone) {
+                return res.status(400).json({ success: false, message: 'Người dùng với thông tin này đã tồn tại.' });
+            }
+            const hashedPassword = await argon2.hash(password);
+            const newUser = new User({
+                userName: userName.trim().toLowerCase(),
+                password: hashedPassword,
+                email,
+                phoneNumber,
+                fullName: `Nhân viên ${company.name}`,
+                roleId: 'staff',
+                companyId: companyId
+            });
+            await newUser.save();
+            company.employees.push({ userId: newUser._id, roleId: 'staff' });
+            await company.save();
+    
+            return res.status(201).json({ success: true, message: 'Nhân viên mới đã được thêm thành công.', user: newUser });
+        } catch (error) {
+            console.error('Lỗi khi thêm nhân viên:', error);
+            return res.status(500).json({ success: false, message: 'Lỗi khi thêm nhân viên cho công ty.', error: error.message });
+        }
+    }, 
+    removeEmployee: async (req, res) => {
+        try {
+            const { companyId, userId } = req.params;
+    
+            const company = await Company.findById(companyId);
+            if (!company) {
+                return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
+            }
+    
+            const user = await User.findById(userId);
+            if (!user || user.companyId.toString() !== companyId) {
+                return res.status(404).json({ success: false, message: 'Người dùng không tồn tại hoặc không thuộc công ty này.' });
+            }
+            company.employees = company.employees.filter(employee => employee.userId.toString() !== userId);
+            await company.save();
+            await user.remove();
+    
+            return res.status(200).json({ success: true, message: 'Nhân viên đã được xóa khỏi công ty.' });
+        } catch (error) {
+            return res.status(500).json({ success: false, message: 'Lỗi khi xóa nhân viên khỏi công ty.', error: error.message });
+        }
+    },
+    searchCompanies: async (req, res) => {
+        try {
+            const { name, email, isActive } = req.query;
+    
+            const filter = {};
+            if (name) filter.name = new RegExp(name, 'i');
+            if (email) filter.email = new RegExp(email, 'i');
+            if (isActive !== undefined) filter.isActive = isActive === 'true';
+    
+            const companies = await Company.find(filter);
+            return res.status(200).json({ success: true, companies });
+        } catch (error) {
+            return res.status(500).json({ success: false, message: 'Lỗi khi tìm kiếm công ty.', error: error.message });
+        }
     }
+    
 };
 
 module.exports = companyController;
