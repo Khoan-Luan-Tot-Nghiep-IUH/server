@@ -70,6 +70,7 @@ const TripSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
     returnTripId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Trip',

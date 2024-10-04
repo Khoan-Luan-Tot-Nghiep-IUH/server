@@ -67,8 +67,6 @@ exports.calculateTripPrice = async (tripId, bookingDate) => {
             const maxPrice = finalPrice - (finalPrice * (minDiscount / 100));
             const minPrice = finalPrice - (finalPrice * (maxDiscount / 100));
 
-            console.log(`Applied a discount of ${maxDiscount}% to trip ${tripId}. Final price: ${minPrice}`);
-
             return {
                 finalPrice: minPrice,
                 maxPrice,
