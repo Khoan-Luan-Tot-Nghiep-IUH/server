@@ -7,7 +7,9 @@ const authMiddleware = require('../middleware/authMiddleware');
 // Lấy danh sách ghế của một chuyến đi (Public Access)
 router.get('/trips/:tripId/seats', tripController.getSeatsByTripId);
 
-router.post('/trips', authMiddleware.verifyToken, authMiddleware.isSuperAdminOrStaffOrAdmin, tripController.createTrip);
+router.post('/trips', authMiddleware.verifyToken,authMiddleware.checkCompanyAccess,authMiddleware.isSuperAdminOrStaffOrAdmin, tripController.createTrip);
+
+router.get('/trips/:companyId', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, tripController.getTripsByCompany);
 
 // Lấy danh sách chuyến đi (Public Access)
 router.get('/trips', tripController.getTrips);

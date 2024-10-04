@@ -5,6 +5,7 @@ const Seat = require('../models/Seat');
 const Pricing = require('../models/Pricing');
 const { calculateTripPrice } = require('./PricingController');
 const moment = require('moment-timezone');
+const Company = require('../models/Company');
 
 
 exports.getSeatsByTripId = async (req, res) => {
@@ -38,7 +39,13 @@ exports.createTrip = async (req, res) => {
     try {
         const { departureLocation, arrivalLocation, departureTime, schedule, arrivalTime, busType, basePrice, isRoundTrip } = req.body;
 
-        // Tìm kiếm địa điểm và loại xe buýt trong cơ sở dữ liệu
+        const { companyId } = req.user;
+        console.log(companyId);
+        const company = await Company.findById(companyId);
+        if (!company) {
+            return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
+        }
+
         const departureLoc = await Location.findById(departureLocation);
         const arrivalLoc = await Location.findById(arrivalLocation);
         const busTypeInfo = await BusType.findById(busType);
@@ -64,6 +71,7 @@ exports.createTrip = async (req, res) => {
             busType,
             schedule,
             basePrice,
+            companyId,
             isRoundTrip: isRoundTrip || false
         });
 
@@ -111,19 +119,17 @@ exports.createTrip = async (req, res) => {
                 busType,
                 schedule,
                 basePrice,
+                companyId, 
                 isRoundTrip: false, // Chuyến đi về không cần là round trip nữa
                 returnTripId: newTrip._id
             });
 
             await returnTrip.save();
 
-            // Cập nhật chuyến đi gốc với ID chuyến đi về
             newTrip.returnTripId = returnTrip._id;
             await newTrip.save();
-
-            // Tạo ghế cho chuyến đi về
             const returnSeats = [];
-            seatNumber = 1; // Reset seat number for the return trip
+            seatNumber = 1; 
 
             for (let floor = 1; floor <= floors; floor++) {
                 for (let row of rows) {
@@ -150,6 +156,15 @@ exports.createTrip = async (req, res) => {
     } catch (err) {
         console.error('Error creating trip:', err);
         res.status(500).json({ success: false, message: 'Failed to create trip', error: err.message });
+    }
+};
+exports.getTripsByCompany = async (req, res) => {
+    try {
+        const { companyId } = req.params;
+        const trips = await Trip.find({ companyId }).populate('departureLocation arrivalLocation busType');
+        res.status(200).json({ success: true, trips });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách chuyến đi.', error: err.message });
     }
 };
 exports.getTrips = async (req, res) => {

@@ -63,21 +63,33 @@ const authMiddleware = {
             res.status(403).json({ success: false, message: 'Yêu cầu quyền Staff hoặc Admin nhà xe.' });
         }
     },
-     checkCompanyAccess: (req, res, next) => {
-        if (req.user && req.user.companyId && req.user.roleId !== 'superadmin') {
-            const requestedCompanyId = req.params.companyId || req.body.companyId || req.query.companyId;
-            if (req.user.companyId.toString() !== requestedCompanyId) {
-                return res.status(403).json({ success: false, message: 'Bạn không có quyền truy cập dữ liệu của công ty này!' });
-            }
-        }
-        next();
-    },
+    
     isSuperAdminOrStaffOrAdmin: (req, res, next) => {
         if (req.user && (req.user.roleId === 'superadmin' || req.user.roleId === 'companyadmin' || req.user.roleId === 'staff')) {
             next();
         } else {
             res.status(403).json({ success: false, message: 'Yêu cầu quyền Superadmin, Admin hoặc Staff.' });
         }
+    },
+    checkCompanyAccess: (req, res, next) => {
+
+
+        const userCompanyId = req.user && req.user.companyId ? req.user.companyId.toString() : null;
+        const requestedCompanyId = req.params.companyId || req.body.companyId || req.query.companyId;
+        if (req.user.roleId === 'superadmin') {
+            return next();
+        }
+        if (!requestedCompanyId) {
+            return next();
+        }
+        if (userCompanyId !== requestedCompanyId) {
+            return res.status(403).json({
+                success: false,
+                message: `Bạn không có quyền truy cập vào dữ liệu của công ty này (ID: ${requestedCompanyId})!`
+            });
+        }
+    
+        next();
     },
     isUser: (req, res, next) => {
         if (req.user && req.user.roleId === 'user') {
