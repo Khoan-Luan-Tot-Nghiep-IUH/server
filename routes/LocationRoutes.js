@@ -3,17 +3,15 @@ const router = express.Router();
 const locationController = require('../controllers/LocationController');
 const authMiddleware = require('../middleware/authMiddleware');
 
-// Tạo địa điểm mới (Yêu cầu quyền Company Admin hoặc Super Admin)
-router.post('/locations', authMiddleware.verifyToken, authMiddleware.isSuperAdmin, locationController.createLocation);
+router
+  .route('/locations')
+  .get(locationController.getLocations) 
+  .post(authMiddleware.verifyToken, authMiddleware.isSuperAdmin, locationController.createLocation); // Tạo mới địa điểm (Super Admin)
 
-// Public routes
-router.get('/locations', locationController.getLocations);
-router.get('/locations/:id', locationController.getLocationById);
-
-// Cập nhật thông tin địa điểm (Yêu cầu quyền Company Admin hoặc Super Admin)
-router.put('/locations/:id', authMiddleware.verifyToken, authMiddleware.isSuperAdmin, locationController.updateLocation);
-
-// Xóa địa điểm (Yêu cầu quyền Company Admin hoặc Super Admin)
-router.delete('/locations/:id', authMiddleware.verifyToken, authMiddleware.isSuperAdmin, locationController.deleteLocation);
+router
+  .route('/locations/:id')
+  .get(locationController.getLocationById)
+  .put(authMiddleware.verifyToken, authMiddleware.isSuperAdmin, locationController.updateLocation) // Cập nhật thông tin địa điểm (Super Admin)
+  .delete(authMiddleware.verifyToken, authMiddleware.isSuperAdmin, locationController.deleteLocation); // Xóa địa điểm (Super Admin)
 
 module.exports = router;

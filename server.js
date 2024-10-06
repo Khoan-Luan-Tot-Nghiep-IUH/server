@@ -12,15 +12,12 @@ const googlePassport = require('./config/passportGoogle');
 const app = express();
 const server = http.createServer(app);
 
-connectDB();
+connectDB(); // Kết nối tới cơ sở dữ liệu
 
+// Middleware
 app.use(cors({
-    origin: [
-      'http://localhost:3000',
-      'https://server-vexeonline.vercel.app',
-      'http://localhost:5000'
-    ],
-    credentials: true
+    origin: process.env.CLIENT_URL || 'http://localhost:5000',
+    credentials: true,
 }));
 
 app.use((req, res, next) => {
