@@ -12,9 +12,8 @@ const googlePassport = require('./config/passportGoogle');
 const app = express();
 const server = http.createServer(app);
 
-connectDB(); // Kết nối tới cơ sở dữ liệu
+connectDB();
 
-const cors = require('cors');
 app.use(cors({
     origin: [
       'http://localhost:3000',
