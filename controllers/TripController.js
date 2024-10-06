@@ -392,46 +392,58 @@ exports.getTripById = async (req, res) => {
 };
 
 
-
 exports.updateTrip = async (req, res) => {
     try {
         const { id } = req.params;
         const updates = req.body;
 
+        // Lấy `companyId` của người dùng hiện tại từ token
+        const userCompanyId = req.user.companyId.toString();
+
+        // Tìm chuyến đi dựa trên `id` để kiểm tra `companyId`
+        const existingTrip = await Trip.findById(id);
+        if (!existingTrip) {
+            return res.status(404).json({ success: false, message: 'Chuyến đi không tồn tại' });
+        }
+
+        // Kiểm tra quyền chỉnh sửa dựa trên `companyId`
+        if (existingTrip.companyId.toString() !== userCompanyId) {
+            return res.status(403).json({
+                success: false,
+                message: `Bạn không có quyền chỉnh sửa chuyến đi của công ty này (ID: ${existingTrip.companyId})!`,
+            });
+        }
+
+        // Kiểm tra tính hợp lệ của điểm khởi hành
         if (updates.departureLocation) {
             const departureLoc = await Location.findById(updates.departureLocation);
             if (!departureLoc) {
-                return res.status(400).json({ success: false, message: 'Invalid departure location' });
+                return res.status(400).json({ success: false, message: 'Địa điểm khởi hành không hợp lệ' });
             }
         }
-
         if (updates.arrivalLocation) {
             const arrivalLoc = await Location.findById(updates.arrivalLocation);
             if (!arrivalLoc) {
-                return res.status(400).json({ success: false, message: 'Invalid arrival location' });
+                return res.status(400).json({ success: false, message: 'Địa điểm đến không hợp lệ' });
             }
         }
-
         if (updates.busType) {
             const busTypeInfo = await BusType.findById(updates.busType);
             if (!busTypeInfo) {
-                return res.status(400).json({ success: false, message: 'Invalid bus type' });
+                return res.status(400).json({ success: false, message: 'Loại xe không hợp lệ' });
             }
         }
-
-        const updatedTrip = await Trip.findByIdAndUpdate(id, updates, { new: true })
-            .populate('departureLocation arrivalLocation busType');
-
-        if (!updatedTrip) {
-            return res.status(404).json({ success: false, message: 'Trip not found' });
-        }
+        const updatedTrip = await Trip.findByIdAndUpdate(
+            id,
+            { ...updates, companyId: userCompanyId },
+            { new: true } 
+        ).populate('departureLocation arrivalLocation busType');
 
         res.status(200).json({ success: true, data: updatedTrip });
     } catch (err) {
-        res.status(500).json({ success: false, message: 'Failed to update trip', error: err.message });
+        res.status(500).json({ success: false, message: 'Có lỗi xảy ra khi cập nhật chuyến đi', error: err.message });
     }
 };
-
 
 exports.deleteTrip = async (req, res) => {
     try {

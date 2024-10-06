@@ -76,6 +76,7 @@ const authMiddleware = {
 
         const userCompanyId = req.user && req.user.companyId ? req.user.companyId.toString() : null;
         const requestedCompanyId = req.params.companyId || req.body.companyId || req.query.companyId;
+        
         if (req.user.roleId === 'superadmin') {
             return next();
         }
