@@ -1,119 +1,152 @@
 const BusType = require('../models/BusType');
+const Trip = require('../models/Trip'); // Import thêm model Trip nếu cần kiểm tra liên kết
 
 // Tạo loại xe buýt mới
 exports.createBusType = async (req, res) => {
-    try {
-        const { name, description, seats, floorCount } = req.body;
+  try {
+    const { name, description, seats, floorCount } = req.body;
+    const companyId = req.user.companyId; // Lấy `companyId` từ `req.user` sau khi xác thực
 
-        // Kiểm tra dữ liệu đầu vào
-        if (!name || seats === undefined || seats <= 0) {
-            return res.status(400).json({ success: false, message: 'Name and a valid number of seats are required' });
-        }
-
-        const newBusType = new BusType({
-            name,
-            description,
-            seats,
-            floorCount: floorCount || 1 // Mặc định là 1 tầng nếu không có giá trị
-        });
-
-        await newBusType.save();
-        res.status(201).json({ success: true, data: newBusType });
-    } catch (err) {
-        res.status(500).json({ success: false, message: 'Failed to create bus type', error: err.message });
+    if (!companyId) {
+      return res.status(403).json({ success: false, message: 'Unauthorized: CompanyId is required.' });
     }
+
+    // Kiểm tra dữ liệu đầu vào và `companyId`
+    if (!name || seats === undefined || seats <= 0) {
+      return res.status(400).json({ success: false, message: 'Name and a valid number of seats are required' });
+    }
+
+    const newBusType = new BusType({
+      name,
+      description,
+      seats,
+      floorCount: floorCount || 1, // Mặc định là 1 tầng nếu không có giá trị
+      companyId, // Gán `companyId` vào loại xe
+    });
+
+    await newBusType.save();
+    res.status(201).json({ success: true, data: newBusType });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to create bus type', error: err.message });
+  }
 };
 
-// Lấy danh sách tất cả các loại xe buýt với phân trang
+// Lấy danh sách tất cả các loại xe buýt theo `companyId` của người dùng hiện tại
 exports.getBusTypes = async (req, res) => {
-    try {
-        const { page = 1, limit = 10 } = req.query;
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const companyId = req.user.companyId; // Lấy `companyId` từ `req.user`
 
-        const busTypes = await BusType.find()
-            .limit(limit * 1)
-            .skip((page - 1) * limit)
-            .exec();
-
-        const count = await BusType.countDocuments();
-
-        res.status(200).json({
-            success: true,
-            data: busTypes,
-            totalPages: Math.ceil(count / limit),
-            currentPage: page
-        });
-    } catch (err) {
-        res.status(500).json({ success: false, message: 'Failed to get bus types', error: err.message });
+    if (!companyId) {
+      return res.status(403).json({ success: false, message: 'Unauthorized access: CompanyId is required.' });
     }
+
+    // Lấy danh sách các loại xe thuộc về `companyId`
+    const busTypes = await BusType.find({ companyId })
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .exec();
+
+    const count = await BusType.countDocuments({ companyId });
+
+    res.status(200).json({
+      success: true,
+      data: busTypes,
+      totalPages: Math.ceil(count / limit),
+      currentPage: parseInt(page, 10),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to get bus types', error: err.message });
+  }
 };
 
+// Lấy chi tiết một loại xe theo `id`
 exports.getBusTypeById = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const busType = await BusType.findById(id);
+  try {
+    const { id } = req.params;
+    const companyId = req.user.companyId;
 
-        if (!busType) {
-            return res.status(404).json({ success: false, message: 'Bus type not found' });
-        }
+    const busType = await BusType.findOne({ _id: id, companyId }); // Kiểm tra quyền sở hữu
 
-        res.status(200).json({ success: true, data: busType });
-    } catch (err) {
-        res.status(500).json({ success: false, message: 'Failed to get bus type', error: err.message });
+    if (!busType) {
+      return res.status(404).json({ success: false, message: 'Bus type not found or access denied.' });
     }
+
+    res.status(200).json({ success: true, data: busType });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to get bus type', error: err.message });
+  }
 };
 
+// Cập nhật loại xe buýt theo `id`
 exports.updateBusType = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { name, description, seats, floorCount } = req.body;
+  try {
+    const { id } = req.params;
+    const { name, description, seats, floorCount } = req.body;
+    const companyId = req.user.companyId;
 
-        if (!name && !description && seats === undefined && floorCount === undefined) {
-            return res.status(400).json({ success: false, message: 'No fields to update' });
-        }
-
-        const updates = {};
-        if (name !== undefined) updates.name = name;
-        if (description !== undefined) updates.description = description;
-        if (seats !== undefined && seats > 0) updates.seats = seats;
-        if (floorCount !== undefined && floorCount > 0) updates.floorCount = floorCount;
-
-        const updatedBusType = await BusType.findByIdAndUpdate(id, updates, { new: true });
-
-        if (!updatedBusType) {
-            return res.status(404).json({ success: false, message: 'Bus type not found' });
-        }
-
-        res.status(200).json({ success: true, data: updatedBusType });
-    } catch (err) {
-        res.status(500).json({ success: false, message: 'Failed to update bus type', error: err.message });
+    if (!companyId) {
+      return res.status(403).json({ success: false, message: 'Unauthorized access: CompanyId is required.' });
     }
+
+    if (!name && !description && seats === undefined && floorCount === undefined) {
+      return res.status(400).json({ success: false, message: 'No fields to update' });
+    }
+
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (description !== undefined) updates.description = description;
+    if (seats !== undefined && seats > 0) updates.seats = seats;
+    if (floorCount !== undefined && floorCount > 0) updates.floorCount = floorCount;
+
+    // Chỉ cập nhật nếu `companyId` khớp
+    const updatedBusType = await BusType.findOneAndUpdate({ _id: id, companyId }, updates, { new: true });
+
+    if (!updatedBusType) {
+      return res.status(404).json({ success: false, message: 'Bus type not found or access denied.' });
+    }
+
+    res.status(200).json({ success: true, data: updatedBusType });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to update bus type', error: err.message });
+  }
 };
 
+// Xóa loại xe buýt theo `id`
 exports.deleteBusType = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const associatedTrips = await Trip.find({ busType: id });
-        if (associatedTrips.length > 0) {
-            return res.status(400).json({ success: false, message: 'Cannot delete BusType associated with existing trips' });
-        }
+  try {
+    const { id } = req.params;
+    const companyId = req.user.companyId;
 
-        const deletedBusType = await BusType.findByIdAndDelete(id);
-
-        if (!deletedBusType) {
-            return res.status(404).json({ success: false, message: 'Bus type not found' });
-        }
-
-        res.status(200).json({ success: true, message: 'Bus type deleted successfully' });
-    } catch (err) {
-        res.status(500).json({ success: false, message: 'Failed to delete bus type', error: err.message });
+    if (!companyId) {
+      return res.status(403).json({ success: false, message: 'Unauthorized access: CompanyId is required.' });
     }
+
+    const associatedTrips = await Trip.find({ busType: id, companyId }); // Chỉ tìm các chuyến đi thuộc công ty hiện tại
+    if (associatedTrips.length > 0) {
+      return res.status(400).json({ success: false, message: 'Cannot delete BusType associated with existing trips.' });
+    }
+
+    const deletedBusType = await BusType.findOneAndDelete({ _id: id, companyId });
+
+    if (!deletedBusType) {
+      return res.status(404).json({ success: false, message: 'Bus type not found or access denied.' });
+    }
+
+    res.status(200).json({ success: true, message: 'Bus type deleted successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to delete bus type', error: err.message });
+  }
 };
 
+// Lấy danh sách tên của các loại xe buýt
 exports.getBusTypeNames = async (req, res) => {
-    try {
-        const busTypeNames = await BusType.find().select('name');
-        res.status(200).json({ success: true, data: busTypeNames });
-    } catch (err) {
-        res.status(500).json({ success: false, message: 'Failed to get bus type names', error: err.message });
-    }
+  try {
+    const companyId = req.user.companyId;
+
+    const busTypeNames = await BusType.find({ companyId }).select('name');
+    res.status(200).json({ success: true, data: busTypeNames });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to get bus type names', error: err.message });
+  }
 };

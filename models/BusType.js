@@ -17,8 +17,13 @@ const BusTypeSchema = new mongoose.Schema({
     },
     floorCount: {
         type: Number,
-        default: 1 // Số tầng của xe, mặc định là 1
-    }
+        default: 1
+    },
+    companyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Company',
+    required: true,
+  },
 });
 
 const BusType = mongoose.model('BusType', BusTypeSchema);
