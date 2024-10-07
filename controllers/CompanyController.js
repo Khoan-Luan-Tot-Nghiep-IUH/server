@@ -243,6 +243,7 @@ const companyController = {
             return res.status(500).json({ success: false, message: 'Lỗi khi xóa nhân viên khỏi công ty.', error: error.message });
         }
     },
+    
     searchCompanies: async (req, res) => {
         try {
             const { name, email, isActive } = req.query;

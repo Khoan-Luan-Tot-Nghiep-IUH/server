@@ -31,17 +31,15 @@ exports.createBusType = async (req, res) => {
   }
 };
 
-// Lấy danh sách tất cả các loại xe buýt theo `companyId` của người dùng hiện tại
 exports.getBusTypes = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const companyId = req.user.companyId; // Lấy `companyId` từ `req.user`
+    const companyId = req.user.companyId; 
 
     if (!companyId) {
       return res.status(403).json({ success: false, message: 'Unauthorized access: CompanyId is required.' });
     }
 
-    // Lấy danh sách các loại xe thuộc về `companyId`
     const busTypes = await BusType.find({ companyId })
       .limit(limit * 1)
       .skip((page - 1) * limit)
@@ -60,13 +58,12 @@ exports.getBusTypes = async (req, res) => {
   }
 };
 
-// Lấy chi tiết một loại xe theo `id`
 exports.getBusTypeById = async (req, res) => {
   try {
     const { id } = req.params;
     const companyId = req.user.companyId;
 
-    const busType = await BusType.findOne({ _id: id, companyId }); // Kiểm tra quyền sở hữu
+    const busType = await BusType.findOne({ _id: id, companyId });
 
     if (!busType) {
       return res.status(404).json({ success: false, message: 'Bus type not found or access denied.' });
@@ -78,7 +75,6 @@ exports.getBusTypeById = async (req, res) => {
   }
 };
 
-// Cập nhật loại xe buýt theo `id`
 exports.updateBusType = async (req, res) => {
   try {
     const { id } = req.params;
@@ -98,8 +94,6 @@ exports.updateBusType = async (req, res) => {
     if (description !== undefined) updates.description = description;
     if (seats !== undefined && seats > 0) updates.seats = seats;
     if (floorCount !== undefined && floorCount > 0) updates.floorCount = floorCount;
-
-    // Chỉ cập nhật nếu `companyId` khớp
     const updatedBusType = await BusType.findOneAndUpdate({ _id: id, companyId }, updates, { new: true });
 
     if (!updatedBusType) {
@@ -112,7 +106,6 @@ exports.updateBusType = async (req, res) => {
   }
 };
 
-// Xóa loại xe buýt theo `id`
 exports.deleteBusType = async (req, res) => {
   try {
     const { id } = req.params;
@@ -139,7 +132,7 @@ exports.deleteBusType = async (req, res) => {
   }
 };
 
-// Lấy danh sách tên của các loại xe buýt
+
 exports.getBusTypeNames = async (req, res) => {
   try {
     const companyId = req.user.companyId;
