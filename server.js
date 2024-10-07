@@ -14,11 +14,17 @@ const server = http.createServer(app);
 
 connectDB(); // Kết nối tới cơ sở dữ liệu
 
-// Middleware
+
 app.use(cors({
     origin: process.env.CLIENT_URL || 'http://localhost:5000',
     credentials: true,
 }));
+
+// app.use(cors({
+//     origin: '*',  
+//     credentials: true
+//   }));
+
 
 app.use((req, res, next) => {
     res.removeHeader("Cross-Origin-Opener-Policy");
