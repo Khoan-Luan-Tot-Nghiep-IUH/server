@@ -15,15 +15,17 @@ const server = http.createServer(app);
 connectDB(); // Kết nối tới cơ sở dữ liệu
 
 
-// app.use(cors({
-//     origin: process.env.CLIENT_URL || 'http://localhost:5000',
-//     credentials: true,
-// }));
-
 app.use(cors({
-    origin: '*',  
-    credentials: true
-  }));
+    origin: "*"|| 'http://localhost:3000',
+    credentials: true,
+}));
+
+// const corsOptions = {
+//     origin: process.env.CLIENT_URL || 'http://localhost:3000',
+//     credentials: true,
+//   };
+//   app.use(cors(corsOptions));
+  
 
 
 app.use((req, res, next) => {
@@ -81,12 +83,6 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('A user disconnected');
     });
-});
-const path = require('path');
-
-app.use(express.static(path.join(__dirname, 'build')));
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
         
 // Khởi động server
