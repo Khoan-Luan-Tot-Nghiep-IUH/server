@@ -54,6 +54,10 @@ app.use('/api', feedbackRoutes);
 app.use('/api', seatRoutes); 
 app.use('/api/companies',companyRoutes);
 
+app.get('/', (req, res) => {
+    res.send('Server is running successfully!');
+});
+
 // Khởi động server
 const PORT = process.env.PORT || 6789;
 app.listen(PORT, () => {
