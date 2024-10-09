@@ -1,43 +1,30 @@
-require('dotenv').config();
 const express = require('express');
-const http = require('http');
-const socketIo = require('socket.io');
 const connectDB = require('./config/DB');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const passport = require('./config/passportFacebook');
-const googlePassport = require('./config/passportGoogle'); 
+const googlePassport = require('./config/passportGoogle');
 
 const app = express();
-const server = http.createServer(app);
 
 connectDB(); // Kết nối tới cơ sở dữ liệu
 
-
 app.use(cors({
-    origin: "*"|| 'http://localhost:3000',
+    origin: process.env.CLIENT_URL || 'http://localhost:5000',
     credentials: true,
 }));
-
-// const corsOptions = {
-//     origin: process.env.CLIENT_URL || 'http://localhost:3000',
-//     credentials: true,
-//   };
-//   app.use(cors(corsOptions));
-  
-
 
 app.use((req, res, next) => {
     res.removeHeader("Cross-Origin-Opener-Policy");
     res.removeHeader("Cross-Origin-Embedder-Policy");
     next();
 });
+
 const helmet = require('helmet');
 app.use(helmet({
     contentSecurityPolicy: false,
 }));
-
 
 app.use(cookieParser());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -48,21 +35,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());
 app.use(googlePassport.initialize());
 
-const io = socketIo(server, {
-    cors: {
-        origin: "*" || 'http://localhost:5000',
-        methods: ["GET", "POST"],
-        credentials: true
-    }
-});
-
-
 // Import Routes
 const routerUser = require('./routes/UserRoutes');
 const tripRoutes = require('./routes/TripRoutes');
 const locationRoutes = require('./routes/LocationRoutes');
 const busTypeRoutes = require('./routes/BusTypeRoutes');
-const bookingRoutes = require('./routes/BookingRoutes')(io);
 const feedbackRoutes = require('./routes/FeedbackRoutes');
 const seatRoutes = require('./routes/SeatRoutes'); 
 const companyRoutes = require('./routes/CompanyRoutes');
@@ -73,22 +50,14 @@ app.use('/api/user', routerUser);
 app.use('/api', tripRoutes);
 app.use('/api', locationRoutes);
 app.use('/api', busTypeRoutes);
-app.use('/api', bookingRoutes);
 app.use('/api', feedbackRoutes); 
 app.use('/api', seatRoutes); 
 app.use('/api/companies',companyRoutes);
 
-io.on('connection', (socket) => {
-    console.log('A user connected');
-    socket.on('disconnect', () => {
-        console.log('A user disconnected');
-    });
-});
-        
 // Khởi động server
 const PORT = process.env.PORT || 6789;
-server.listen(PORT, () => {
+app.listen(PORT, () => {
     console.log(`Server is now running on PORT: ${PORT}`);
 });
 
-module.exports = { app, server};
+module.exports = app;
