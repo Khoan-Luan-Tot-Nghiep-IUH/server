@@ -50,7 +50,7 @@ app.use(googlePassport.initialize());
 
 const io = socketIo(server, {
     cors: {
-        origin: process.env.CLIENT_URL || 'http://localhost:5000',
+        origin: "*" || 'http://localhost:5000',
         methods: ["GET", "POST"],
         credentials: true
     }
