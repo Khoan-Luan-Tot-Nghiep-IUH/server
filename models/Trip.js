@@ -35,7 +35,7 @@ const TripSchema = new mongoose.Schema({
         type: Date,
         required: true,
         default: function() {
-            return moment().tz('Asia/Ho_Chi_Minh').toDate();
+            return moment().utc().toDate();
         },
         index: true
     },
@@ -43,7 +43,7 @@ const TripSchema = new mongoose.Schema({
         type: Date,
         required: true,
         default: function() {
-            return moment().tz('Asia/Ho_Chi_Minh').toDate();
+            return moment().utc().toDate();
         },
         index: true
     },

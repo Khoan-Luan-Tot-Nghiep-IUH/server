@@ -6,11 +6,18 @@
         "use": "@vercel/node"
       }
     ],
-    "routes": [
-      {
-        "src": "/(.*)",
-        "dest": "/server.js"
-      }
-    ]
+   "routes": [
+    { "src": "/api/user/(.*)", "dest": "/server.js" },
+    { "src": "/api/trip/(.*)", "dest": "/server.js" },
+    { "src": "/api/location/(.*)", "dest": "/server.js" },
+    { "src": "/api/busType/(.*)", "dest": "/server.js" },
+    { "src": "/api/feedback/(.*)", "dest": "/server.js" },
+    { "src": "/api/seat/(.*)", "dest": "/server.js" },
+    { "src": "/api/companies/(.*)", "dest": "/server.js" },
+    { "src": "/(.*)", "dest": "/server.js" }
+  ],
+  "env": {
+    "MONGODB_URL": "mongodb+srv://KhoaLuan:DepTraiSo1@khoaluantotnghiep.ibxma.mongodb.net/KhoaLuan?retryWrites=true&w=majority"
+  }
   }
   

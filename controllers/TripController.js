@@ -55,19 +55,19 @@ exports.createTrip = async (req, res) => {
         }
 
         // Đảm bảo định dạng thời gian khởi hành và thời gian đến
-        const departureTimeDate = moment(departureTime, moment.ISO_8601, true).tz('Asia/Ho_Chi_Minh').toDate();
-        const arrivalTimeDate = moment(arrivalTime, moment.ISO_8601, true).tz('Asia/Ho_Chi_Minh').toDate();
+        const departureTimeUTC = moment.tz(departureTime, 'Asia/Ho_Chi_Minh').utc().toDate();
+        const arrivalTimeUTC = moment.tz(arrivalTime, 'Asia/Ho_Chi_Minh').utc().toDate();
 
-        if (!departureTimeDate || !arrivalTimeDate || isNaN(departureTimeDate.getTime()) || isNaN(arrivalTimeDate.getTime())) {
+        // Kiểm tra tính hợp lệ của thời gian
+        if (!departureTimeUTC || !arrivalTimeUTC || isNaN(departureTimeUTC.getTime()) || isNaN(arrivalTimeUTC.getTime())) {
             return res.status(400).json({ success: false, message: 'Invalid date format' });
         }
-
         // Tạo chuyến đi mới
         const newTrip = new Trip({
             departureLocation,
             arrivalLocation,
-            departureTime: departureTimeDate,
-            arrivalTime: arrivalTimeDate,
+            departureTime: departureTimeUTC,
+            arrivalTime: arrivalTimeUTC,
             busType,
             schedule,
             basePrice,
