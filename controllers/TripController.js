@@ -248,19 +248,19 @@ exports.searchTrips = async (req, res) => {
         } = req.query;
 
         // Tìm kiếm địa điểm khởi hành và đến từ cơ sở dữ liệu
-        const departureLoc = departureLocation ? await Location.findOne({ name: departureLocation.trim() }) : null;
-        const arrivalLoc = arrivalLocation ? await Location.findOne({ name: arrivalLocation.trim() }) : null;
+        const [departureLoc, arrivalLoc] = await Promise.all([
+            departureLocation ? Location.findOne({ name: departureLocation.trim() }) : null,
+            arrivalLocation ? Location.findOne({ name: arrivalLocation.trim() }) : null
+        ]);
 
         if ((departureLocation && !departureLoc) || (arrivalLocation && !arrivalLoc)) {
             return res.status(404).json({ success: false, message: 'Không tìm thấy địa điểm' });
         }
 
         let filter = {};
-
         if (departureLoc) {
             filter.departureLocation = departureLoc._id;
         }
-
         if (arrivalLoc) {
             filter.arrivalLocation = arrivalLoc._id;
         }
@@ -279,6 +279,7 @@ exports.searchTrips = async (req, res) => {
         
             console.log("Filter (UTC):", filter);
         }        
+
         // Lọc theo giờ khởi hành (departureTimeRange)
         if (departureTimeRange) {
             const [startTime, endTime] = departureTimeRange.split(',');
@@ -313,18 +314,22 @@ exports.searchTrips = async (req, res) => {
             filter._id = { $in: tripsWithPricing };
         }
         
-        let departureTrips = await Trip.find(filter)
-            .populate('departureLocation arrivalLocation busType')
-            .exec();
-        const tripIds = departureTrips.map(trip => trip._id);
-        const seatCounts = await Seat.aggregate([
-            { $match: { trip: { $in: tripIds }, isAvailable: true } },
-            { $group: { _id: "$trip", availableSeats: { $sum: 1 } } }
+
+        // Truy vấn chuyến đi và số ghế trống đồng thời
+        let [departureTrips, seatCounts] = await Promise.all([
+            Trip.find(filter).populate('departureLocation arrivalLocation busType').lean().exec(),
+            Seat.aggregate([
+                { $match: { trip: { $in: await Trip.find(filter).distinct('_id') }, isAvailable: true } },
+                { $group: { _id: "$trip", availableSeats: { $sum: 1 } } }
+            ])
         ]);
-        const availableSeatsMap = {};
-        seatCounts.forEach(count => {
-            availableSeatsMap[count._id] = count.availableSeats;
-        });
+
+        // Tạo bản đồ số ghế trống cho từng chuyến
+        const availableSeatsMap = seatCounts.reduce((map, count) => {
+            map[count._id] = count.availableSeats;
+            return map;
+        }, {});
+
 
         // Thêm số ghế trống vào từng chuyến đi
         departureTrips = departureTrips.map(trip => ({
