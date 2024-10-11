@@ -58,4 +58,10 @@ app.get('/', (req, res) => {
     res.send('Server is running successfully!');
 });
 
+// Khởi động server
+const PORT = process.env.PORT || 6789;
+app.listen(PORT, () => {
+    console.log(`Server is now running on PORT: ${PORT}`);
+});
+
 module.exports = app;

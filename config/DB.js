@@ -1,11 +1,13 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const db = process.env.MONGODB_URL;
-
+console.log('MongoDB URL:', process.env.MONGODB_URL);
 const connectDB = async () => {
     try {
         mongoose.set('strictQuery', true);
-        await mongoose.connect(db, {
+        await mongoose.connect(process.env.MONGODB_URL,  {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
             serverSelectionTimeoutMS: 30000, 
             socketTimeoutMS: 45000 
         });
