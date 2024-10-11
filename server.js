@@ -12,7 +12,6 @@ connectDB(); // Kết nối tới cơ sở dữ liệu
 
 app.use(cors({
     origin: "*" || "http://localhost:3000",
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
 }));
 
@@ -57,12 +56,6 @@ app.use('/api/companies',companyRoutes);
 
 app.get('/', (req, res) => {
     res.send('Server is running successfully!');
-});
-
-// Khởi động server
-const PORT = process.env.PORT || 6789;
-app.listen(PORT, () => {
-    console.log(`Server is now running on PORT: ${PORT}`);
 });
 
 module.exports = app;
