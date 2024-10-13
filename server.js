@@ -43,6 +43,7 @@ const busTypeRoutes = require('./routes/BusTypeRoutes');
 const feedbackRoutes = require('./routes/FeedbackRoutes');
 const seatRoutes = require('./routes/SeatRoutes'); 
 const companyRoutes = require('./routes/CompanyRoutes');
+const bookingRoutes = require('./routes/BookingRoutes');
 require('./utils/cron');
 
 // Routes
@@ -53,6 +54,7 @@ app.use('/api', busTypeRoutes);
 app.use('/api', feedbackRoutes); 
 app.use('/api', seatRoutes); 
 app.use('/api/companies',companyRoutes);
+app.use('/api',bookingRoutes);
 
 app.get('/', (req, res) => {
     res.send('Server is running successfully!');

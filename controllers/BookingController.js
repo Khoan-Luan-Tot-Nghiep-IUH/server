@@ -8,6 +8,7 @@ exports.createBooking = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
 
+
     try {
         const { tripId, seatNumbers, includeReturnTrip, returnSeatNumbers } = req.body;
         const userId = req.user._id;
@@ -133,6 +134,7 @@ exports.createBooking = async (req, res) => {
         res.status(400).json({ success: false, message: error.message });
     }
 };
+
 
 exports.cancelBooking = async (req, res) => {
     const session = await mongoose.startSession();
