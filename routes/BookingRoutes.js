@@ -7,8 +7,8 @@ module.exports = (io) => {
 
     // Chỉ sử dụng socketIoMiddleware cho route tạo booking
     const socketIoMiddleware = require('../middleware/socketIoMiddleware')(io);
-
     router.post('/bookings', authMiddleware.verifyToken, socketIoMiddleware, bookingController.createBooking);
+    
     
     router.get('/bookings', authMiddleware.verifyToken, bookingController.getUserBookings);
     router.get('/bookings/:id', authMiddleware.verifyToken, bookingController.getBookingById);

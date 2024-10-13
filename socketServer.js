@@ -1,32 +1,34 @@
-// socketServer.js
+const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
-
-const server = http.createServer();
+const app = express();
+const server = http.createServer(app);
 const io = socketIo(server, {
-  cors: {
-    origin: '*',
-    methods: ["GET", "POST"],
-    credentials: true
-  }
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
 });
 
 io.on('connection', (socket) => {
-  console.log('A user connected');
-  
-  // Lắng nghe các sự kiện từ client
-  socket.on('book_ticket', (data) => {
-    console.log('Ticket booking request received:', data);
-    // Xử lý logic đặt vé
-    socket.emit('booking_response', { message: 'Booking successful' });
-  });
+    console.log('New client connected:', socket.id);
 
-  socket.on('disconnect', () => {
-    console.log('A user disconnected');
-  });
+    socket.on('createBooking', (data) => {
+        console.log('Received booking data:', data);
+
+        io.emit('seatsBooked', {
+            tripId: data.tripId,
+            seatNumbers: data.seatNumbers,
+            message: 'Seats have been booked.'
+        });
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Client disconnected:', socket.id);
+    });
 });
 
-const PORT = process.env.SOCKET_PORT || 8080;
+const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`Socket server running on port: ${PORT}`);
+    console.log(`WebSocket server is running on port ${PORT}`);
 });
