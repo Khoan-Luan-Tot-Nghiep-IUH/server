@@ -3,6 +3,7 @@ const Trip = require('../models/Trip');
 const Seat = require('../models/Seat');
 const Booking = require('../models/Booking');
 const { calculateTripPrice } = require('./PricingController');
+const User = require('../models/User');
 
 exports.createBooking = async (req, res) => {
     const session = await mongoose.startSession();
@@ -60,6 +61,15 @@ exports.createBooking = async (req, res) => {
                 status: 'Confirmed'
             }).save({ session })
         ));
+
+        //tính điểm thưởng 
+        const pointsToAdd = seatNumbers.length * 10;  // Mỗi ghế = 10 điểm
+        const user = await User.findById(userId).session(session);
+        if (user) {
+            user.loyaltyPoints += pointsToAdd;  // Cộng số điểm loyaltyPoints dựa trên số ghế
+            await user.save({ session });  // Lưu người dùng với session hiện tại
+        }
+
 
         // Xử lý đặt vé khứ hồi (nếu có)
         if (includeReturnTrip && trip.isRoundTrip && trip.returnTripId) {
@@ -127,13 +137,11 @@ exports.createBooking = async (req, res) => {
         await session.abortTransaction();
         session.endSession();
 
-        // Kiểm tra trước khi in ra dữ liệu lỗi chi tiết
         const errorData = {
             message: error.message,
             stack: error.stack,
         };
 
-        // In thêm chi tiết nếu các biến đã được khai báo
         if (typeof tripId !== 'undefined') errorData.tripId = tripId;
         if (typeof seatNumbers !== 'undefined') errorData.seatNumbers = seatNumbers;
         if (typeof includeReturnTrip !== 'undefined') errorData.includeReturnTrip = includeReturnTrip;
