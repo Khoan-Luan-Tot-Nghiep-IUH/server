@@ -108,8 +108,8 @@ exports.createTrip = async (req, res) => {
         // Nếu là chuyến đi khứ hồi, tạo chuyến đi về
         let returnTrip = null;
         if (isRoundTrip) {
-            const returnDepartureTime = moment(arrivalTimeDate).add(1, 'hours').toDate();
-            const returnArrivalTime = moment(returnDepartureTime).add(9, 'hours').toDate(); // Giả định 9 giờ cho chuyến đi về
+            const returnDepartureTime = moment(arrivalTimeUTC).add(1, 'hours').toDate();
+            const returnArrivalTime = moment(returnDepartureTime).add(9, 'hours').toDate();
 
             returnTrip = new Trip({
                 departureLocation: arrivalLocation,
@@ -120,7 +120,7 @@ exports.createTrip = async (req, res) => {
                 schedule,
                 basePrice,
                 companyId, 
-                isRoundTrip: false, // Chuyến đi về không cần là round trip nữa
+                isRoundTrip: false,
                 returnTripId: newTrip._id
             });
 
@@ -231,6 +231,7 @@ exports.getTrips = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to get trips', error: err.message });
     }
 };
+
 exports.searchTrips = async (req, res) => {
     try {
         const { 
@@ -244,7 +245,8 @@ exports.searchTrips = async (req, res) => {
             seatRow, 
             floor,
             minPrice, 
-            maxPrice
+            maxPrice,
+            companyId,
         } = req.query;
 
         // Tìm kiếm địa điểm khởi hành và đến từ cơ sở dữ liệu
@@ -264,6 +266,10 @@ exports.searchTrips = async (req, res) => {
         if (arrivalLoc) {
             filter.arrivalLocation = arrivalLoc._id;
         }
+        if (companyId) {
+            filter.company = companyId;
+        }
+
         if (departureDate) {
             // Sử dụng ngày UTC trực tiếp, không chuyển đổi múi giờ
             const startOfDay = moment.utc(departureDate).startOf('day').toDate();
@@ -315,21 +321,25 @@ exports.searchTrips = async (req, res) => {
         }
         
 
-        // Truy vấn chuyến đi và số ghế trống đồng thời
-        let [departureTrips, seatCounts] = await Promise.all([
-            Trip.find(filter).populate('departureLocation arrivalLocation busType').lean().exec(),
-            Seat.aggregate([
-                { $match: { trip: { $in: await Trip.find(filter).distinct('_id') }, isAvailable: true } },
-                { $group: { _id: "$trip", availableSeats: { $sum: 1 } } }
-            ])
+        let departureTrips = await Trip.find(filter)
+            .populate('departureLocation arrivalLocation busType')
+            .exec();
+        const tripIds = departureTrips.map(trip => trip._id);
+        const seatCounts = await Seat.aggregate([
+            { $match: { trip: { $in: tripIds }, isAvailable: true } },
+            { $group: { _id: "$trip", availableSeats: { $sum: 1 } } }
         ]);
-
-        // Tạo bản đồ số ghế trống cho từng chuyến
-        const availableSeatsMap = seatCounts.reduce((map, count) => {
-            map[count._id] = count.availableSeats;
-            return map;
-        }, {});
-
+        if (departureTrips.length === 0) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy chuyến đi phù hợp' });
+        }
+        if (!departureLocation && !departureDate) {
+            return res.status(400).json({ success: false, message: 'Cần nhập điểm đi hoặc ngày đi để tìm kiếm' });
+        }        
+        const availableSeatsMap = {};
+        seatCounts.forEach(count => {
+            availableSeatsMap[count._id] = count.availableSeats;
+        });
+        
 
         // Thêm số ghế trống vào từng chuyến đi
         departureTrips = departureTrips.map(trip => ({
@@ -377,6 +387,8 @@ exports.searchTrips = async (req, res) => {
         res.status(500).json({ success: false, message: 'Không thể tìm thấy chuyến đi', error: err.message });
     }
 };
+
+
 exports.getTripById = async (req, res) => {
     try {
         const { id } = req.params;

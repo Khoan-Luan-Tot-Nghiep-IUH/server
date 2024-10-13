@@ -9,8 +9,7 @@ module.exports = (io) => {
     const socketIoMiddleware = require('../middleware/socketIoMiddleware')(io);
 
     router.post('/bookings', authMiddleware.verifyToken, socketIoMiddleware, bookingController.createBooking);
-
-    // Các route khác không cần Socket.io middleware
+    
     router.get('/bookings', authMiddleware.verifyToken, bookingController.getUserBookings);
     router.get('/bookings/:id', authMiddleware.verifyToken, bookingController.getBookingById);
     router.delete('/bookings/:id', authMiddleware.verifyToken, bookingController.cancelBooking);
