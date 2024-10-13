@@ -8,22 +8,28 @@ exports.createBooking = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
 
-
     try {
         const { tripId, seatNumbers, includeReturnTrip, returnSeatNumbers } = req.body;
         const userId = req.user._id;
+        console.log('Request body:', req.body);
+
+        // Kiểm tra sự tồn tại của tripId
+        if (!tripId) {
+            throw new Error('Trip ID is required');
+        }
 
         // Kiểm tra seatNumbers
         if (!seatNumbers || seatNumbers.length === 0) {
             throw new Error('Seat numbers are required for booking');
         }
 
-        // Xử lý đặt vé cho chuyến đi chính
+        // Tìm chuyến đi
         const trip = await Trip.findById(tripId).session(session).lean();
         if (!trip) {
             throw new Error('Trip not found');
         }
 
+        // Tìm ghế trống
         const seats = await Seat.find({
             trip: tripId,
             seatNumber: { $in: seatNumbers },
@@ -35,7 +41,7 @@ exports.createBooking = async (req, res) => {
             throw new Error('One or more seats are no longer available');
         }
 
-        // Tính toán giá vé cho chuyến đi chính
+        // Tính giá vé
         const { finalPrice } = await calculateTripPrice(tripId, new Date());
 
         // Cập nhật trạng thái ghế
@@ -55,7 +61,7 @@ exports.createBooking = async (req, res) => {
             }).save({ session })
         ));
 
-        // Xử lý đặt vé cho chuyến về (nếu có)
+        // Xử lý đặt vé khứ hồi (nếu có)
         if (includeReturnTrip && trip.isRoundTrip && trip.returnTripId) {
             const returnTripId = trip.returnTripId;
             const returnTrip = await Trip.findById(returnTripId).session(session).lean();
@@ -64,7 +70,6 @@ exports.createBooking = async (req, res) => {
                 throw new Error('Return trip not found');
             }
 
-            // Nếu người dùng không chỉ định ghế cho lượt về, sử dụng ghế của lượt đi
             const finalReturnSeatNumbers = returnSeatNumbers && returnSeatNumbers.length > 0 ? returnSeatNumbers : seatNumbers;
 
             const returnSeats = await Seat.find({
@@ -100,7 +105,7 @@ exports.createBooking = async (req, res) => {
         await session.commitTransaction();
         session.endSession();
 
-        // Phát sự kiện socket để cập nhật trạng thái chỗ ngồi
+        // Phát sự kiện socket.io để cập nhật trạng thái chỗ ngồi
         if (req.io && typeof req.io.emit === 'function') {
             req.io.emit('seatsBooked', {
                 tripId,
@@ -121,21 +126,23 @@ exports.createBooking = async (req, res) => {
     } catch (error) {
         await session.abortTransaction();
         session.endSession();
-        console.error('Error creating booking:', {
+
+        // Kiểm tra trước khi in ra dữ liệu lỗi chi tiết
+        const errorData = {
             message: error.message,
             stack: error.stack,
-            data: {
-                tripId,
-                seatNumbers,
-                includeReturnTrip,
-                returnSeatNumbers,
-            },
-        });
+        };
+
+        // In thêm chi tiết nếu các biến đã được khai báo
+        if (typeof tripId !== 'undefined') errorData.tripId = tripId;
+        if (typeof seatNumbers !== 'undefined') errorData.seatNumbers = seatNumbers;
+        if (typeof includeReturnTrip !== 'undefined') errorData.includeReturnTrip = includeReturnTrip;
+        if (typeof returnSeatNumbers !== 'undefined') errorData.returnSeatNumbers = returnSeatNumbers;
+
+        console.error('Error creating booking:', errorData);
         res.status(400).json({ success: false, message: error.message });
     }
 };
-
-
 exports.cancelBooking = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
