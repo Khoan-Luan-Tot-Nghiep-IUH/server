@@ -38,6 +38,7 @@ router.use(authMiddleware.verifyToken);  // All routes below will require token
 router.get('/profile/:userId',authMiddleware.verifyToken, authMiddleware.isUser, userController.getUserDetails);
 router.put('/profile/:userId',authMiddleware.verifyToken, authMiddleware.isUser, userController.updateUser);
 router.put('/change-password/:userId', authMiddleware.isUser, userController.changePassword);
+router.post('/redeem-points', authMiddleware.verifyToken,authMiddleware.isUser,userController.redeemPointsForVoucher);
 
 // Routes accessible by company admin or superadmin
 router.use(authMiddleware.isCompanyAdmin);
@@ -48,7 +49,7 @@ router.put('/status/:userId', userController.updateUserStatus); // Company admin
 router.put('/loyalty/:userId', userController.addLoyaltyPoints); // Company admin can manage loyalty points
 router.get('/search', userController.searchUsers); // Company admin can search users
 
-// Routes only accessible by superadmin
+
 router.use(authMiddleware.isSuperAdmin);
 
 router.get('/superadmin', (req, res) => {

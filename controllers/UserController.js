@@ -7,6 +7,60 @@ const moment = require('moment-timezone');
 const { validationResult } = require('express-validator');
 const {sendVerificationCode, verifyCode } = require('../config/twilioConfig');
 const TempUser = require('../models/TempUser');
+const Voucher = require('../models/Voucher'); 
+const generateVoucherCode = () => {
+    return 'VOUCHER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+};
+
+
+
+const createVoucher = async (userId, discount) => {
+    const code = generateVoucherCode();
+    const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
+
+    const voucher = new Voucher({
+        code,
+        userId,
+        discount,
+        expiryDate,
+        isUsed: false
+    });
+
+    await voucher.save();
+    return voucher;
+};
+
+
+const redeemPointsForVoucher = async (req, res) => {
+    const userId = req.body.userId; 
+    const pointsToRedeem = req.body.pointsToRedeem; 
+
+    try {
+        // Lấy thông tin người dùng
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
+        }
+
+        if (user.loyaltyPoints < pointsToRedeem) {
+            return res.status(400).json({ success: false, message: 'Điểm tích lũy không đủ để đổi' });
+        }
+        const discount = pointsToRedeem / 10; 
+
+        user.loyaltyPoints -= pointsToRedeem;
+        await user.save();
+
+        const voucher = await createVoucher(userId, discount);
+        res.status(200).json({
+            success: true,
+            message: `Bạn đã đổi thành công ${pointsToRedeem} điểm để nhận mã giảm giá.`,
+            voucher: voucher
+        });
+    } catch (error) {
+        console.error('Lỗi khi đổi điểm:', error);
+        res.status(500).json({ success: false, message: 'Lỗi hệ thống. Vui lòng thử lại sau.' });
+    }
+};
 
 
 const sendResetPasswordEmail = async (req, res) => {
@@ -382,5 +436,6 @@ module.exports = {
     updateUserStatus,
     addLoyaltyPoints,
     searchUsers,
-    confirmRegistration
+    confirmRegistration,
+    redeemPointsForVoucher,
 };
