@@ -388,7 +388,6 @@ exports.searchTrips = async (req, res) => {
     }
 };
 
-
 exports.getTripById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -407,8 +406,6 @@ exports.getTripById = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to get trip', error: err.message });
     }
 };
-
-
 
 exports.updateTrip = async (req, res) => {
     try {
@@ -482,7 +479,7 @@ exports.deleteExpiredTripsForCompany = async (req, res) => {
             });
         }
         return res.status(200).json({
-            message: `${result.deletedCount} chuyến đi đã quá hạn cho công ty ${companyId} được xóa thành công.`
+            message: `${result.deletedCount} chuyến đi đã quá hạn được xóa thành công.`
         });
     } catch (error) {
         console.error('Lỗi khi xóa các chuyến đi đã quá hạn:', error);
