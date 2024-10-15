@@ -446,7 +446,6 @@ exports.updateTrip = async (req, res) => {
     }
 };
 
-
 exports.deleteTrip = async (req, res) => {
     try {
         const { id } = req.params;
@@ -465,6 +464,34 @@ exports.deleteTrip = async (req, res) => {
     }
 };
 
+exports.deleteExpiredTripsForCompany = async (req, res) => {
+    try {
+        const { companyId } = req.user;
+        if (!companyId) {
+            return res.status(400).json({ message: 'Vui lòng cung cấp ID của công ty.' });
+        }
+        const currentTime = moment().utc().toDate();
+        const result = await Trip.deleteMany({
+            arrivalTime: { $lt: currentTime },
+            companyId: companyId         
+        });
+
+        if (result.deletedCount === 0) {
+            return res.status(200).json({
+                message: 'Không có chuyến đi nào đã quá hạn để xóa.'
+            });
+        }
+        return res.status(200).json({
+            message: `${result.deletedCount} chuyến đi đã quá hạn cho công ty ${companyId} được xóa thành công.`
+        });
+    } catch (error) {
+        console.error('Lỗi khi xóa các chuyến đi đã quá hạn:', error);
+        return res.status(500).json({
+            message: 'Có lỗi xảy ra khi xóa các chuyến đi đã quá hạn.',
+            error: error.message
+        });
+    }
+};
 
 exports.getTripsWithPricing = async (req, res) => {
     try {

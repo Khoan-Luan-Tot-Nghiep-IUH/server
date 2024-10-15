@@ -84,6 +84,10 @@ io.on('connection', (socket) => {
 });
 const path = require('path');
 
+app.use(express.static(path.join(__dirname, 'build')));
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'build', 'index.html'));
+});
         
 // Khởi động server
 const PORT = process.env.PORT || 6789;
