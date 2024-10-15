@@ -11,10 +11,10 @@ const BookingSchema = new mongoose.Schema({
         ref: 'Trip',
         required: true
     },
-    seatNumber: {
+    seatNumbers: [{
         type: Number,
         required: true
-    },
+    }],
     bookingDate: {
         type: Date,
         default: Date.now
@@ -23,6 +23,10 @@ const BookingSchema = new mongoose.Schema({
         type: String,
         enum: ['Pending', 'Confirmed', 'Cancelled'],
         default: 'Pending'
+    },
+    totalPrice: {
+        type: Number,
+        required: true
     },
     paymentStatus: {
         type: String,
