@@ -4,6 +4,7 @@ const Seat = require('../models/Seat');
 const Booking = require('../models/Booking');
 const { calculateTripPrice } = require('./PricingController');
 const User = require('../models/User');
+const Passenger = require('../models/Passenger');
 
 
 exports.createBooking = async (req, res) => {
@@ -98,6 +99,31 @@ exports.createBooking = async (req, res) => {
             { $set: { isAvailable: false, bookedBy: userId } },
             { session }
         );
+        let passenger = await Passenger.findOne({ user: userId, trip: tripId }).session(session);
+
+        if (passenger) {
+            const existingSeats = passenger.seatNumbers;
+            const newSeats = seatNumbers.filter(seat => !existingSeats.includes(seat));
+        
+            if (newSeats.length === 0) {
+                throw new Error('Bạn đã đặt các ghế này rồi');
+            }
+        
+            passenger.seatNumbers = [...existingSeats, ...newSeats];
+            await passenger.save({ session });
+        } else {
+            passenger = new Passenger({
+                name: req.user.fullName,
+                email: req.user.email,
+                phone: req.user.phoneNumber,
+                seatNumbers,    
+                trip: tripId,
+                user: userId
+            });
+            await passenger.save({ session });
+        }
+
+
         const pointsToAdd = seatNumbers.length * 10; 
         const user = await User.findById(userId).session(session);
         if (user) {

@@ -13,6 +13,8 @@ router.get('/trips/company/:companyId', authMiddleware.verifyToken, authMiddlewa
 router.delete('/trips/expired-trips',authMiddleware.verifyToken,authMiddleware.checkCompanyAccess, tripController.deleteExpiredTripsForCompany);
 router.put('/trips/:id', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, tripController.updateTrip);
 
+router.put('/trips/:tripId/drivers', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, tripController.updateDriversForTrip);
+
 // Tìm kiếm chuyến đi (Public Access)
 router.get('/trips/search', tripController.searchTrips);
 
