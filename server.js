@@ -64,6 +64,7 @@ const bookingRoutes = require('./routes/BookingRoutes')(io);
 const feedbackRoutes = require('./routes/FeedbackRoutes');
 const seatRoutes = require('./routes/SeatRoutes'); 
 const companyRoutes = require('./routes/CompanyRoutes');
+const DriverRoutes = require('./routes/DriverRoutes');
 require('./utils/cron');
 
 // Routes
@@ -75,7 +76,7 @@ app.use('/api', bookingRoutes);
 app.use('/api', feedbackRoutes); 
 app.use('/api', seatRoutes); 
 app.use('/api/companies',companyRoutes);
-
+app.use('/api/driver', DriverRoutes);
 io.on('connection', (socket) => {
     console.log('A user connected');
     socket.on('disconnect', () => {

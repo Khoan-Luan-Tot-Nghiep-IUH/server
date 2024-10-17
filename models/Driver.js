@@ -15,7 +15,13 @@ const DriverSchema = new mongoose.Schema({
     phoneNumber: {
         type: String,
         required: true,
-        trim: true
+        trim: true,
+        validate: {
+            validator: function(v) {
+                return /\d{10}/.test(v);
+            },
+            message: props => `${props.value} không phải là số điện thoại hợp lệ!`
+        }
     },
     address: {
         type: String,
@@ -23,11 +29,15 @@ const DriverSchema = new mongoose.Schema({
     },
     birthDate: {
         type: Date,
-        required: true
-    },
-    hireDate: {
-        type: Date,
-        default: Date.now
+        required: true,
+        validate: {
+            validator: function(v) {
+                const currentYear = new Date().getFullYear();
+                const birthYear = v.getFullYear();
+                return currentYear - birthYear >= 18;
+            },
+            message: props => `Tài xế phải từ 18 tuổi trở lên!`
+        }
     },
     isActive: {
         type: Boolean,
@@ -36,8 +46,14 @@ const DriverSchema = new mongoose.Schema({
     trips: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Trip'
-    }]
+    }],
+    companyId: {  
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Company',
+        required: true 
+    }
 });
 
 const Driver = mongoose.model('Driver', DriverSchema);
+
 module.exports = Driver;

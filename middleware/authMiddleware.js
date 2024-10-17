@@ -106,7 +106,13 @@ const authMiddleware = {
             res.status(403).json({ success: false, message: 'Tài khoản của bạn đã bị vô hiệu hóa.' });
         }
     },
-
+    isDriver: (req, res, next) => {
+        if (req.user && req.user.roleId === 'driver') {
+            next();
+        } else {
+            res.status(403).json({ success: false, message: 'Yêu cầu quyền tài xế.' });
+        }
+    },
     generateAccessToken
 };
 

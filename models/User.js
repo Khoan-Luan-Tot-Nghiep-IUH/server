@@ -43,7 +43,7 @@ const UserSchema = new mongoose.Schema({
     },
     roleId: {
         type: String,
-        enum: ['superadmin', 'companyadmin', 'staff', 'user'],
+        enum: ['superadmin', 'companyadmin', 'staff', 'user','driver'],
         default: 'user',
         required: true
     },
@@ -52,6 +52,13 @@ const UserSchema = new mongoose.Schema({
         ref: 'Company',
         required: function() {
             return this.roleId !== 'superadmin' && this.roleId !== 'user';
+        }
+    },
+    driverId: { 
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Driver',
+        required: function() {
+            return this.roleId === 'driver';
         }
     },
     address: {

@@ -7,7 +7,6 @@ const { calculateTripPrice } = require('./PricingController');
 const moment = require('moment-timezone');
 const Company = require('../models/Company');
 
-
 exports.getSeatsByTripId = async (req, res) => {
     try {
         const { tripId } = req.params;
@@ -37,7 +36,7 @@ exports.getSeatsByTripId = async (req, res) => {
 };
 exports.createTrip = async (req, res) => {
     try {
-        const { departureLocation, arrivalLocation, departureTime, schedule, arrivalTime, busType, basePrice, isRoundTrip } = req.body;
+        const { departureLocation, arrivalLocation, departureTime, schedule, arrivalTime, busType, basePrice, isRoundTrip ,driverIds } = req.body;
 
         const { companyId } = req.user;
         console.log(companyId);
@@ -49,6 +48,7 @@ exports.createTrip = async (req, res) => {
         const departureLoc = await Location.findById(departureLocation);
         const arrivalLoc = await Location.findById(arrivalLocation);
         const busTypeInfo = await BusType.findById(busType);
+        const drivers = await Driver.find({ _id: { $in: driverIds } });
 
         if (!departureLoc || !arrivalLoc || !busTypeInfo) {
             return res.status(400).json({ success: false, message: 'Invalid location or bus type' });
@@ -72,6 +72,7 @@ exports.createTrip = async (req, res) => {
             schedule,
             basePrice,
             companyId,
+            drivers: driverIds,
             isRoundTrip: isRoundTrip || false
         });
 
@@ -158,6 +159,30 @@ exports.createTrip = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to create trip', error: err.message });
     }
 };
+
+exports.updateDriversForTrip = async (req, res) => {
+    try {
+        const { tripId } = req.params;
+        const { driverIds } = req.body;
+
+        const trip = await Trip.findById(tripId);
+        if (!trip) {
+            return res.status(404).json({ success: false, message: 'Chuyến đi không tồn tại.' });
+        }
+        const drivers = await Driver.find({ _id: { $in: driverIds } });
+        if (drivers.length !== driverIds.length) {
+            return res.status(400).json({ success: false, message: 'Invalid drivers' });
+        }
+        trip.drivers = driverIds;
+        await trip.save();
+
+        res.status(200).json({ success: true, message: 'Cập nhật tài xế thành công.', trip });
+    } catch (err) {
+        console.error('Error updating drivers:', err);
+        res.status(500).json({ success: false, message: 'Failed to update drivers', error: err.message });
+    }
+};
+
 exports.getTripsByCompany = async (req, res) => {
     try {
         const { companyId } = req.params;

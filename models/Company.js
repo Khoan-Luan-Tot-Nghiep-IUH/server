@@ -66,7 +66,7 @@ const CompanySchema = new mongoose.Schema({
         },
         roleId: {
             type: String,
-            enum: ['companyadmin', 'staff'],
+            enum: ['companyadmin', 'staff', 'driver'],
             required: true
         }
     }]
