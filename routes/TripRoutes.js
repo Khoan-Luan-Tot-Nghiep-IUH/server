@@ -17,10 +17,8 @@ router.put('/trips/:tripId/drivers', authMiddleware.verifyToken, authMiddleware.
 
 // Tìm kiếm chuyến đi (Public Access)
 router.get('/trips/search', tripController.searchTrips);
-
 router.get('/trips/:id', tripController.getTripById);
 router.get('/trips', tripController.getTrips);
-
 
 
 router.delete('/trips/:id', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, tripController.deleteTrip);

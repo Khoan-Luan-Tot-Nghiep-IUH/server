@@ -25,21 +25,38 @@ const authMiddleware = {
             if (!token) {
                 return res.status(401).json({ success: false, message: 'Không tìm thấy token xác thực' });
             }
-
+    
+            // Giải mã token
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+            // Tìm người dùng và kiểm tra token hiện tại
             const user = await User.findById(decoded.id).select('-password');
-
             if (!user) {
                 return res.status(401).json({ success: false, message: 'Token không hợp lệ hoặc người dùng không tồn tại' });
             }
-
+    
+            // Kiểm tra token hiện tại trong cơ sở dữ liệu
+            if (user.currentToken !== token) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Phiên của bạn đã bị vô hiệu hóa. Vui lòng đăng nhập lại.'
+                });
+            }
+    
+            // Kiểm tra nếu tài khoản bị vô hiệu hóa
+            if (!user.isActive) {
+                return res.status(403).json({ success: false, message: 'Tài khoản của bạn đã bị vô hiệu hóa.' });
+            }
+    
             req.user = user;
             next();
         } catch (error) {
+            if (error.name === 'TokenExpiredError') {
+                return res.status(401).json({ success: false, message: 'Token đã hết hạn.' });
+            }
             return res.status(401).json({ success: false, message: 'Token không hợp lệ', error: error.message });
         }
     },
-
     isSuperAdmin: (req, res, next) => {
         if (req.user && req.user.roleId === 'superadmin') {
             next();

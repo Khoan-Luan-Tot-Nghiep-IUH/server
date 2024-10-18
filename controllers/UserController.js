@@ -230,8 +230,9 @@ const userLogin = async (req, res) => {
         });
 
         user.lastLogin = moment().tz("Asia/Ho_Chi_Minh").toDate();
+        user.currentToken = accessToken;
         await user.save();
-
+        
         res.cookie('access_token', accessToken, {
             httpOnly: true,
             sameSite: 'Strict',

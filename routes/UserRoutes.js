@@ -43,11 +43,11 @@ router.post('/redeem-points', authMiddleware.verifyToken,authMiddleware.isUser,u
 // Routes accessible by company admin or superadmin
 router.use(authMiddleware.isCompanyAdmin);
 
-router.get('/all', userController.getAllUsers); // Company admin can manage users within their company
-router.get('/role/:roleId', userController.getUsersByRole); // Company admin can filter users by role
-router.put('/status/:userId', userController.updateUserStatus); // Company admin can update user status
-router.put('/loyalty/:userId', userController.addLoyaltyPoints); // Company admin can manage loyalty points
-router.get('/search', userController.searchUsers); // Company admin can search users
+router.get('/all', userController.getAllUsers);
+router.get('/role/:roleId', userController.getUsersByRole);
+router.put('/status/:userId', userController.updateUserStatus);
+router.put('/loyalty/:userId', userController.addLoyaltyPoints);
+router.get('/search', userController.searchUsers);
 
 
 router.use(authMiddleware.isSuperAdmin);
