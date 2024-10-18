@@ -6,6 +6,7 @@ const Pricing = require('../models/Pricing');
 const { calculateTripPrice } = require('./PricingController');
 const moment = require('moment-timezone');
 const Company = require('../models/Company');
+const Driver = require('../models/Driver');
 
 exports.getSeatsByTripId = async (req, res) => {
     try {
@@ -34,6 +35,7 @@ exports.getSeatsByTripId = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to fetch seats', error: err.message });
     }
 };
+
 exports.createTrip = async (req, res) => {
     try {
         const { departureLocation, arrivalLocation, departureTime, schedule, arrivalTime, busType, basePrice, isRoundTrip ,driverIds } = req.body;
@@ -44,7 +46,6 @@ exports.createTrip = async (req, res) => {
         if (!company) {
             return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
         }
-
         const departureLoc = await Location.findById(departureLocation);
         const arrivalLoc = await Location.findById(arrivalLocation);
         const busTypeInfo = await BusType.findById(busType);
