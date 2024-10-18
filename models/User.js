@@ -97,7 +97,8 @@ const UserSchema = new mongoose.Schema({
     bookings: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Booking'
-    }]
+    }],
+    currentToken: { type: String, default: null },
 }, {
     validateBeforeSave: true,
     timestamps: true

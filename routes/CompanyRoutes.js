@@ -13,9 +13,8 @@ router.delete('/:companyId', authMiddleware.verifyToken, authMiddleware.isSuperA
 router.post('/add-staff', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.addStaff);
 router.delete('/:companyId/remove-employee/:userId', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.removeEmployee);
 
-// Public Routes (Company Admin và Staff có thể xem thông tin)
-router.get('/', authMiddleware.verifyToken, companyController.getAllCompanies); // Có thể giới hạn nếu muốn
-
-
+// Public Routes (Lấy danh sách công ty)
+router.get('/', authMiddleware.verifyToken, companyController.getAllCompanies);
+// Xem thông tin công ty 
 router.get('/:companyId', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.getCompanyById);
 module.exports = router;
