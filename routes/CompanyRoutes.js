@@ -12,9 +12,11 @@ router.delete('/:companyId', authMiddleware.verifyToken, authMiddleware.isSuperA
 // Routes dành cho Company Admin
 router.post('/add-staff', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.addStaff);
 router.delete('/:companyId/remove-employee/:userId', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.removeEmployee);
-
+router.post('/add-driver', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.createDriver);
+router.get('/drivers', authMiddleware.verifyToken,authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.getDriversByCompany);
 // Public Routes (Lấy danh sách công ty)
 router.get('/', authMiddleware.verifyToken, companyController.getAllCompanies);
+
 // Xem thông tin công ty 
 router.get('/:companyId', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.getCompanyById);
 module.exports = router;

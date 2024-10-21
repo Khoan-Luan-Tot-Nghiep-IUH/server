@@ -1,6 +1,7 @@
 const argon2 = require('argon2');
 const Company = require('../models/Company');
 const User = require('../models/User');
+const Driver = require('../models/Driver');
 
 const companyController = {
     createCompany: async (req, res) => {
@@ -258,8 +259,96 @@ const companyController = {
         } catch (error) {
             return res.status(500).json({ success: false, message: 'Lỗi khi tìm kiếm công ty.', error: error.message });
         }
-    }
+    },
+    createDriver: async (req, res) => {
+        console.log('Dữ liệu nhận được:', req.body); 
+        try {
+            const { userName,fullName, password, email, phoneNumber, licenseNumber  } = req.body;
+            const companyId = req.user.companyId;
+            if (!userName|| !fullName || !password || !email || !phoneNumber || !licenseNumber) {
+                return res.status(400).json({ success: false, message: 'Vui lòng điền đầy đủ thông tin tài xế.' });
+            }
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return res.status(400).json({ success: false, message: 'Định dạng email không hợp lệ.' });
+            }
+            const company = await Company.findById(companyId);
+            if (!company) {
+                return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
+            }
+            const [existingUser, existingEmail, existingPhone, existingLicense] = await Promise.all([
+                User.findOne({ userName: userName.trim().toLowerCase() }),
+                User.findOne({ email }),
+                User.findOne({ phoneNumber }),
+                Driver.findOne({ licenseNumber })
+            ]);
+
+            if (existingUser) {
+                return res.status(400).json({ success: false, message: 'Tên đăng nhập này đã được sử dụng.' });
+            }
+            if (existingEmail) {
+                return res.status(400).json({ success: false, message: 'Email này đã được sử dụng.' });
+            }
+            if (existingPhone) {
+                return res.status(400).json({ success: false, message: 'Số điện thoại này đã được sử dụng.' });
+            }
+            if (existingLicense) {
+                return res.status(400).json({ success: false, message: 'Giấy phép lái xe này đã được sử dụng.' });
+            }
+            if (!fullName) {
+                return res.status(400).json({ success: false, message: 'Thiếu họ và tên.' });
+            }
+            // Mã hóa mật khẩu
+            const hashedPassword = await argon2.hash(password);
+
+
+            const newUser = new User({
+                userName: userName.trim().toLowerCase(),
+                password: hashedPassword,
+                email,
+                phoneNumber,
+                fullName: fullName.trim(),
+                roleId: 'driver',
+                companyId: companyId
+            });
+
+            await newUser.save();
+
+            const newDriver = new Driver({
+                userId: newUser._id, 
+                companyId: companyId,
+                licenseNumber: licenseNumber, 
+            });
+
+            await newDriver.save();
+            company.employees.push({ userId: newUser._id, roleId: 'driver' });
+            await company.save();
+            const populatedDriver = await Driver.findById(newDriver._id).populate('userId', 'fullName email phoneNumber');
+            return res.status(201).json({ 
+                success: true, 
+                message: 'Tài xế mới đã được tạo thành công.', 
+                driver: populatedDriver
+            });
+        } catch (error) {
+            console.error('Lỗi khi tạo tài xế:', error);
+            return res.status(500).json({ success: false, message: 'Lỗi khi tạo tài xế.', error: error.message });
+        }
+    },
+    getDriversByCompany: async (req, res) => {
+        try {
+          const companyId  = req.user.companyId;
+
+          const drivers = await Driver.find({ companyId }).populate('userId', 'fullName email phoneNumber');
+          
+          if (!drivers || drivers.length === 0) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy tài xế cho công ty này.' });
+          }
     
+          return res.status(200).json({ success: true, drivers });
+        } catch (error) {
+          return res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách tài xế.', error: error.message });
+        }
+     },
 };
 
 module.exports = companyController;

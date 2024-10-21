@@ -77,6 +77,7 @@ app.use('/api', feedbackRoutes);
 app.use('/api', seatRoutes); 
 app.use('/api/companies',companyRoutes);
 app.use('/api/driver', DriverRoutes);
+
 io.on('connection', (socket) => {
     console.log('A user connected');
     socket.on('disconnect', () => {

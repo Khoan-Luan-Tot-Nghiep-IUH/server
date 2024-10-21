@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Trip = require('../models/Trip');
 const Location = require('../models/Location');
 const BusType = require('../models/BusType');
@@ -7,6 +8,7 @@ const { calculateTripPrice } = require('./PricingController');
 const moment = require('moment-timezone');
 const Company = require('../models/Company');
 const Driver = require('../models/Driver');
+
 
 exports.getSeatsByTripId = async (req, res) => {
     try {
@@ -161,28 +163,174 @@ exports.createTrip = async (req, res) => {
     }
 };
 
-exports.updateDriversForTrip = async (req, res) => {
+
+exports.updateTripDrivers = async (req, res) => {
     try {
         const { tripId } = req.params;
-        const { driverIds } = req.body;
+        let { driverIds } = req.body;
+        const { companyId } = req.user;
 
-        const trip = await Trip.findById(tripId);
+        // Validate tripId format
+        if (!mongoose.Types.ObjectId.isValid(tripId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Định dạng tripId không hợp lệ'
+            });
+        }
+
+        // Validate and convert driverIds
+        if (typeof driverIds === 'string') {
+            driverIds = [driverIds];
+        }
+
+        if (!Array.isArray(driverIds)) {
+            return res.status(400).json({
+                success: false,
+                message: 'driverIds phải là một mảng hoặc một id'
+            });
+        }
+
+        // Validate format of each driverId
+        const invalidIds = driverIds.filter(id => !mongoose.Types.ObjectId.isValid(id));
+        if (invalidIds.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Một số ID tài xế không đúng định dạng',
+                invalidIds
+            });
+        }
+
+        // Convert string IDs to ObjectIds
+        const driverObjectIds = driverIds.map(id => new mongoose.Types.ObjectId(id));
+
+        // Validate trip exists and belongs to company
+        const trip = await Trip.findOne({ 
+            _id: tripId,
+            companyId: new mongoose.Types.ObjectId(companyId)
+        });
+        
         if (!trip) {
-            return res.status(404).json({ success: false, message: 'Chuyến đi không tồn tại.' });
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy chuyến đi hoặc chuyến đi không thuộc về công ty của bạn'
+            });
         }
-        const drivers = await Driver.find({ _id: { $in: driverIds } });
+
+        // Validate all drivers exist and belong to company
+        const drivers = await Driver.find({
+            _id: { $in: driverObjectIds },
+            companyId: new mongoose.Types.ObjectId(companyId),
+            isActive: true
+        });
+
         if (drivers.length !== driverIds.length) {
-            return res.status(400).json({ success: false, message: 'Invalid drivers' });
+            return res.status(400).json({
+                success: false,
+                message: 'Một số tài xế không tồn tại hoặc không thuộc về công ty của bạn'
+            });
         }
-        trip.drivers = driverIds;
+
+        const tripStartTime = moment(trip.departureTime);
+        const tripEndTime = moment(trip.arrivalTime);
+
+        const overlappingTrips = await Trip.find({
+            _id: { $ne: new mongoose.Types.ObjectId(tripId) },
+            departureTime: { $lt: tripEndTime.toDate() },
+            arrivalTime: { $gt: tripStartTime.toDate() },
+            drivers: { $in: driverObjectIds }
+        });
+
+        if (overlappingTrips.length > 0) {
+            const overlappingDrivers = overlappingTrips.reduce((acc, trip) => {
+                const overlapping = trip.drivers.filter(driverId => 
+                    driverObjectIds.some(id => id.equals(driverId))
+                );
+                return [...acc, ...overlapping];
+            }, []);
+
+            const uniqueOverlappingDrivers = [...new Set(overlappingDrivers.map(id => id.toString()))];
+            const conflictingDrivers = await Driver.find({
+                _id: { $in: uniqueOverlappingDrivers }
+            }, 'licenseNumber');
+
+            return res.status(400).json({
+                success: false,
+                message: 'Tài xế đã được phân công cho chuyến đi khác trong khoảng thời gian này',
+                conflictingDrivers: conflictingDrivers.map(d => d.licenseNumber)
+            });
+        }
+        const oldDriverIds = trip.drivers || [];
+        const driversToRemove = oldDriverIds.filter(id => 
+            !driverObjectIds.some(newId => newId.equals(id))
+        );
+        
+        if (driversToRemove.length > 0) {
+            await Driver.updateMany(
+                { _id: { $in: driversToRemove } },
+                { $pull: { trips: tripId } }
+            );
+        }
+
+        const newDriverIds = driverObjectIds.filter(id => 
+            !oldDriverIds.some(oldId => oldId.equals(id))
+        );
+        
+        if (newDriverIds.length > 0) {
+            await Driver.updateMany(
+                { _id: { $in: newDriverIds } },
+                { $addToSet: { trips: tripId } }
+            );
+        }
+
+        trip.drivers = driverObjectIds;
         await trip.save();
 
-        res.status(200).json({ success: true, message: 'Cập nhật tài xế thành công.', trip });
-    } catch (err) {
-        console.error('Error updating drivers:', err);
-        res.status(500).json({ success: false, message: 'Failed to update drivers', error: err.message });
+        if (trip.isRoundTrip && trip.returnTripId) {
+            const returnTrip = await Trip.findById(trip.returnTripId);
+            if (returnTrip) {
+                returnTrip.drivers = driverObjectIds;
+                await returnTrip.save();
+                if (driversToRemove.length > 0) {
+                    await Driver.updateMany(
+                        { _id: { $in: driversToRemove } },
+                        { $pull: { trips: returnTrip._id } }
+                    );
+                }
+                if (newDriverIds.length > 0) {
+                    await Driver.updateMany(
+                        { _id: { $in: newDriverIds } },
+                        { $addToSet: { trips: returnTrip._id } }
+                    );
+                }
+            }
+        }
+        const updatedTrip = await Trip.findById(tripId)
+            .populate({
+                path: 'drivers',
+                select: 'licenseNumber userId',
+                populate: {
+                    path: 'userId',
+                    select: 'fullName phoneNumber email'
+                }
+            })
+            .populate('returnTripId');
+
+        res.json({
+            success: true,
+            message: 'Cập nhật tài xế thành công',
+            data: updatedTrip
+        });
+
+    } catch (error) {
+        console.error('Error updating trip drivers:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi khi cập nhật tài xế',
+            error: error.message
+        });
     }
 };
+
 
 exports.getTripsByCompany = async (req, res) => {
     try {
