@@ -1,17 +1,45 @@
 const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
 
-// Lấy danh sách các chuyến đi của tài xế
 const getDriverTrips = async (req, res) => {
     try {
-        const driverId = req.user._id; 
-        const trips = await Trip.find({ driverId }).populate('passengers').populate('companyId');
-        
-        res.status(200).json({ success: true, trips });
+        const userId = req.user._id; 
+        const driver = await Driver.findOne({ userId: userId });
+
+        if (!driver) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy tài xế tương ứng với người dùng này'
+            });
+        }
+        const driverId = driver._id;
+        const trips = await Trip.find({ drivers: { $in: [driverId] } })
+            .populate('departureLocation')
+            .populate('arrivalLocation');
+
+        if (!trips || trips.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không có chuyến đi nào cho tài xế này'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            count: trips.length,
+            trips: trips
+        });
+
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách chuyến đi.', error: error.message });
+        console.error('Error details:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi khi lấy danh sách chuyến đi',
+            error: error.message
+        });
     }
 };
+
 
 const updateTripStatus = async (req, res) => {
     try {
@@ -48,10 +76,6 @@ const updateTripStatus = async (req, res) => {
         res.status(500).json({ success: false, message: 'Lỗi khi cập nhật trạng thái chuyến đi.', error: error.message });
     }
 };
-
-
-
-
 
 // Lấy danh sách hành khách của chuyến đi
 const getTripPassengers = async (req, res) => {
