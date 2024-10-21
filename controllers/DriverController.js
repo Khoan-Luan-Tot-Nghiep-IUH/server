@@ -13,30 +13,45 @@ const getDriverTrips = async (req, res) => {
     }
 };
 
-// Cập nhật trạng thái chuyến đi (ví dụ: bắt đầu, hoàn thành)
 const updateTripStatus = async (req, res) => {
     try {
         const { tripId } = req.params;
-        const { status } = req.body; // Trạng thái chuyến đi mới
-        
+        const { status } = req.body;
+
+        // Define allowed status values
+        const allowedStatuses = ['Scheduled', 'Ongoing', 'Delayed', 'Cancelled', 'Completed'];
+
+        // Validate the status input
+        if (!allowedStatuses.includes(status)) {
+            return res.status(400).json({ success: false, message: 'Trạng thái không hợp lệ.' });
+        }
+
+        // Find the trip by ID
         const trip = await Trip.findById(tripId);
         if (!trip) {
             return res.status(404).json({ success: false, message: 'Không tìm thấy chuyến đi.' });
         }
 
-        // Chỉ tài xế của chuyến đi mới có quyền cập nhật trạng thái
-        if (trip.driverId.toString() !== req.user._id.toString()) {
+        // Find the driver by userId to verify if the user is a driver
+        const driver = await Driver.findOne({ userId: req.user._id });
+        if (!driver || !trip.drivers.includes(driver._id)) {
             return res.status(403).json({ success: false, message: 'Bạn không có quyền cập nhật chuyến đi này.' });
         }
 
+        // Update the trip status
         trip.status = status;
         await trip.save();
 
         res.status(200).json({ success: true, message: 'Cập nhật trạng thái chuyến đi thành công.', trip });
     } catch (error) {
+        console.error('Error updating trip status:', error);  // Log error for debugging
         res.status(500).json({ success: false, message: 'Lỗi khi cập nhật trạng thái chuyến đi.', error: error.message });
     }
 };
+
+
+
+
 
 // Lấy danh sách hành khách của chuyến đi
 const getTripPassengers = async (req, res) => {
