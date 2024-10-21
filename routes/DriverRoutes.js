@@ -3,7 +3,6 @@ const router = express.Router();
 const driverController = require('../controllers/DriverController');
 const authMiddleware = require('../middleware/authMiddleware');
 
-// Chỉ tài xế mới có quyền truy cập các route này
 router.get('/trips', authMiddleware.verifyToken, authMiddleware.isDriver, driverController.getDriverTrips);
 router.put('/trips/:tripId/status', authMiddleware.verifyToken, authMiddleware.isDriver, driverController.updateTripStatus);
 router.get('/trips/:tripId/passengers', authMiddleware.verifyToken, authMiddleware.isDriver, driverController.getTripPassengers);

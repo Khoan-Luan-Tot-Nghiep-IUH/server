@@ -57,9 +57,8 @@ const UserSchema = new mongoose.Schema({
     driverId: { 
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Driver',
-        required: function() {
-            return this.roleId === 'driver';
-        }
+        required: false,
+        
     },
     address: {
         type: String,

@@ -261,10 +261,11 @@ const companyController = {
         }
     },
     createDriver: async (req, res) => {
+        console.log('Dữ liệu nhận được:', req.body); 
         try {
-            const { userName, password, email, phoneNumber, licenseNumber , fullName  } = req.body;
+            const { userName,fullName, password, email, phoneNumber, licenseNumber  } = req.body;
             const companyId = req.user.companyId;
-            if (!userName || !password || !email || !phoneNumber || !licenseNumber) {
+            if (!userName|| !fullName || !password || !email || !phoneNumber || !licenseNumber) {
                 return res.status(400).json({ success: false, message: 'Vui lòng điền đầy đủ thông tin tài xế.' });
             }
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -294,22 +295,24 @@ const companyController = {
             if (existingLicense) {
                 return res.status(400).json({ success: false, message: 'Giấy phép lái xe này đã được sử dụng.' });
             }
-
+            if (!fullName) {
+                return res.status(400).json({ success: false, message: 'Thiếu họ và tên.' });
+            }
             // Mã hóa mật khẩu
             const hashedPassword = await argon2.hash(password);
 
-            // Tạo tài khoản người dùng (User) với vai trò là driver
+
             const newUser = new User({
                 userName: userName.trim().toLowerCase(),
                 password: hashedPassword,
                 email,
                 phoneNumber,
                 fullName: fullName.trim(),
-                roleId: 'driver', // Vai trò là tài xế
+                roleId: 'driver',
                 companyId: companyId
             });
 
-            await newUser.save(); // Lưu user vào DB
+            await newUser.save();
 
             const newDriver = new Driver({
                 userId: newUser._id, 
@@ -320,8 +323,12 @@ const companyController = {
             await newDriver.save();
             company.employees.push({ userId: newUser._id, roleId: 'driver' });
             await company.save();
-
-            return res.status(201).json({ success: true, message: 'Tài xế mới đã được tạo thành công.', user: newUser, driver: newDriver });
+            const populatedDriver = await Driver.findById(newDriver._id).populate('userId', 'fullName email phoneNumber');
+            return res.status(201).json({ 
+                success: true, 
+                message: 'Tài xế mới đã được tạo thành công.', 
+                driver: populatedDriver
+            });
         } catch (error) {
             console.error('Lỗi khi tạo tài xế:', error);
             return res.status(500).json({ success: false, message: 'Lỗi khi tạo tài xế.', error: error.message });
@@ -329,8 +336,9 @@ const companyController = {
     },
     getDriversByCompany: async (req, res) => {
         try {
-          const { companyId } = req.user.companyId;
-          const drivers = await Driver.find({ companyId }).populate('userId', 'fullName email phoneNumber'); // Populate để lấy thông tin từ bảng User
+          const companyId  = req.user.companyId;
+
+          const drivers = await Driver.find({ companyId }).populate('userId', 'fullName email phoneNumber');
           
           if (!drivers || drivers.length === 0) {
             return res.status(404).json({ success: false, message: 'Không tìm thấy tài xế cho công ty này.' });

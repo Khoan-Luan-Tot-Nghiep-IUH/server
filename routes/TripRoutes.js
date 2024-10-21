@@ -12,8 +12,7 @@ router.post('/trips', authMiddleware.verifyToken,authMiddleware.checkCompanyAcce
 router.get('/trips/company/:companyId', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, tripController.getTripsByCompany);
 router.delete('/trips/expired-trips',authMiddleware.verifyToken,authMiddleware.checkCompanyAccess, tripController.deleteExpiredTripsForCompany);
 router.put('/trips/:id', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, tripController.updateTrip);
-
-router.put('/trips/:tripId/drivers', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, tripController.updateDriversForTrip);
+router.put('/trips/:tripId/drivers', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, tripController.updateTripDrivers);
 
 // Tìm kiếm chuyến đi (Public Access)
 router.get('/trips/search', tripController.searchTrips);
