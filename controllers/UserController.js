@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const argon2 = require('argon2');
-const { generalAcesstoken, generateAccessToken } = require('../middleware/authMiddleware');
+const {generateAccessToken } = require('../middleware/authMiddleware');
 const crypto = require('crypto');
 const { sendOrderConfirmationEmail } = require('../config/mailer');
 const moment = require('moment-timezone');
@@ -195,7 +195,6 @@ const confirmRegistration = async (req, res) => {
         res.status(500).json({ success: false, msg: 'Xác nhận đăng ký thất bại', error: error.message });
     }
 };
-
 
 const userLogin = async (req, res) => {
     const { userName, password } = req.body;
