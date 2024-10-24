@@ -163,7 +163,6 @@ exports.createTrip = async (req, res) => {
     }
 };
 
-
 exports.updateTripDrivers = async (req, res) => {
     try {
         const { tripId } = req.params;
@@ -331,16 +330,27 @@ exports.updateTripDrivers = async (req, res) => {
     }
 };
 
-
 exports.getTripsByCompany = async (req, res) => {
     try {
         const { companyId } = req.params;
-        const trips = await Trip.find({ companyId }).populate('departureLocation arrivalLocation busType');
+        const trips = await Trip.find({ companyId })
+            .populate('departureLocation arrivalLocation busType')
+            .populate({
+                path: 'drivers', 
+                select: 'licenseNumber userId',  
+                populate: {
+                    path: 'userId', 
+                    select: 'fullName phoneNumber email'
+                }
+            });
+
+        // Trả về danh sách chuyến đi
         res.status(200).json({ success: true, trips });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách chuyến đi.', error: err.message });
     }
-};
+}
+
 exports.getTrips = async (req, res) => {
     try {
         const { 
