@@ -5,21 +5,47 @@ const jwt = require('jsonwebtoken');
 const authMiddleware = require('../middleware/authMiddleware');
 const { facebookLogin, facebookCallback } = require('../controllers/facebookAuthController');
 const passport = require('passport');
+const User = require('../models/User');
 
 // Google Authentication Routes
 router.get('/google', 
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
 
-router.get('/google/callback',
+const generateUserName = (email) => {
+  // Tạo userName từ phần trước "@" của email và một số ngẫu nhiên
+  return email.split('@')[0] + Math.floor(Math.random() * 10000);
+};
+
+router.get('/google/callback', 
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
-  (req, res) => {
-    const token = jwt.sign({ id: req.user._id, roleId: req.user.roleId, email:req.user.email , fullName: req.user.fullName }, process.env.JWT_SECRET, { expiresIn: '24h' });
-    res.redirect(`${process.env.CLIENT_URL}/login?token=${token}`);
+  async (req, res) => {
+    try {
+      let userName = req.user.userName;
+      if (!userName) {
+        userName = generateUserName(req.user.email);
+      }
+
+      // Tạo JWT token
+      const token = jwt.sign(
+        { id: req.user._id, email: req.user.email, fullName: req.user.fullName, userName },
+        process.env.JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      // Lưu token vào `currentToken`
+      await User.findByIdAndUpdate(req.user._id, { currentToken: token });
+
+      // Chuyển hướng về phía client với token
+      res.redirect(`${process.env.CLIENT_URL}/login?token=${token}`);
+    } catch (error) {
+      console.error('Error in Google callback:', error); // Log lỗi chi tiết
+      res.status(500).json({ message: 'Google login failed', error: error.message });
+    }
   }
 );
 
-// Facebook Authentication Routes
+
 router.get('/facebook', facebookLogin);
 router.get('/facebook/callback', facebookCallback);
 
