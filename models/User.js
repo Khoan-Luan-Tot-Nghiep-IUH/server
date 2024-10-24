@@ -113,6 +113,14 @@ UserSchema.statics.findByUserName = function(userName) {
     return this.findOne({ userName: userName });
 };
 
+UserSchema.pre('save', async function (next) {
+    if (!this.userName && (this.googleId || this.facebookId)) {
+      this.userName = this.email ? this.email.split('@')[0] + Math.floor(Math.random() * 10000) : `user_${Math.floor(Math.random() * 10000)}`;
+    }
+  
+    next();
+  });
+
 const User = mongoose.model('User', UserSchema);
 
 module.exports = User;
