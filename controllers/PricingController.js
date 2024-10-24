@@ -41,46 +41,15 @@ exports.createPricing = async (req, res) => {
 };
 
 // Tính toán giá của chuyến đi dựa trên thời gian đặt vé
-exports.calculateTripPrice = async (tripId, bookingDate) => {
-    try {
-        // Lấy thông tin chuyến đi
-        const trip = await Trip.findById(tripId);
-        if (!trip) {
-            throw new Error('Trip not found');
-        }
-
-        // Lấy giá cơ bản từ trip
-        let finalPrice = trip.basePrice;
-
-        // Tìm tất cả các bảng giá có hiệu lực
-        const pricings = await Pricing.find({
-            trip: tripId,
-            effectiveDate: { $lte: bookingDate },
-            endDate: { $gte: bookingDate }
-        });
-
-        if (pricings && pricings.length > 0) {
-            const discounts = pricings.map(pricing => pricing.discount);
-            const maxDiscount = Math.max(...discounts);
-            const minDiscount = Math.min(...discounts);
-
-            const maxPrice = finalPrice - (finalPrice * (minDiscount / 100));
-            const minPrice = finalPrice - (finalPrice * (maxDiscount / 100));
-
-            return {
-                finalPrice: minPrice,
-                maxPrice,
-                minPrice
-            };
-        } else {
-            console.log(`No discount applied to trip ${tripId}. Final price: ${finalPrice}`);
-        }
-
-        return { finalPrice };
-    } catch (error) {
-        console.error('Error calculating trip price:', error.message);
-        throw new Error('Failed to calculate trip price');
+exports.calculateTripPrice = async (tripId, seatNumbers) => {
+    const trip = await Trip.findById(tripId).lean();
+    if (!trip) {
+        throw new Error('Chuyến đi không tồn tại');
     }
+
+    // Tính toán giá dựa trên số ghế và chuyến đi
+    const pricePerSeat = trip.basePrice; 
+    return pricePerSeat;
 };
 
 // Hàng ngày kiểm tra và vô hiệu hóa các bảng giá hết hạn

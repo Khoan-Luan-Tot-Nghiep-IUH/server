@@ -19,6 +19,10 @@ const BookingSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     },
+    orderCode: {
+        type: String,
+        unique: true,
+    },
     status: {
         type: String,
         enum: ['Pending', 'Confirmed', 'Cancelled'],
@@ -26,6 +30,11 @@ const BookingSchema = new mongoose.Schema({
     },
     totalPrice: {
         type: Number,
+        required: true
+    },
+        paymentMethod: {
+        type: String,
+        enum: ['OnBoard', 'Online'],
         required: true
     },
     paymentStatus: {
