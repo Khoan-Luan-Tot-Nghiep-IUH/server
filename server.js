@@ -68,6 +68,10 @@ const DriverRoutes = require('./routes/DriverRoutes');
 require('./utils/cron');
 
 // Routes
+
+const paymentRoutes = require('./routes/PaymentRoutes');
+app.use('/api/payment', paymentRoutes);
+
 app.use('/api/user', routerUser);
 app.use('/api', tripRoutes);
 app.use('/api', locationRoutes);
@@ -90,7 +94,12 @@ app.use(express.static(path.join(__dirname, 'build')));
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
-        
+ 
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ error: err.message });
+});
+
 // Khởi động server
 const PORT = process.env.PORT || 6789;
 server.listen(PORT, () => {
