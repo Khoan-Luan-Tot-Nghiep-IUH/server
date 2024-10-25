@@ -45,7 +45,10 @@ exports.createBooking = async (req, res) => {
         // Kiểm tra chuyến đi
         const trip = await Trip.findById(tripId).session(session).lean();
         if (!trip) throw new Error('Chuyến đi không tồn tại');
-
+        
+        if (trip.status !== 'Scheduled') {
+            throw new Error('Chuyến đi hiện tại không còn khả dụng để đặt vé');
+        }
         let totalPrice = 0;
 
         // Kiểm tra trạng thái ghế đã được đặt
@@ -93,7 +96,7 @@ exports.createBooking = async (req, res) => {
                 totalPrice,
                 status: paymentMethod === 'Online' ? 'Pending' : 'Confirmed',
                 paymentMethod,
-                paymentStatus: paymentMethod === 'Online' ? 'Unpaid' : 'Paid',
+                paymentStatus: 'Unpaid',
             });
         }
 
@@ -158,7 +161,7 @@ exports.createBooking = async (req, res) => {
                     return { name: `Ghế số ${seat}`, quantity: 1, price: seatInfo.price };
                 }),
                 returnUrl: `http://localhost:5000/api/payment-success`,
-                cancelUrl: `http://localhost:5000/payment-cancel`,
+                cancelUrl: `http://localhost:5000/api/payment-cancel`,
             };
 
             const paymentLinkResponse = await payOS.createPaymentLink(body);
@@ -204,12 +207,77 @@ exports.paymentSuccess = async (req, res) => {
         booking.status = 'Confirmed';
         booking.paymentStatus = 'Paid';
         await booking.save();
-        
-        return res.status(200).json({ success: true, message: 'Thanh toán thành công', data: booking });
+        return res.redirect(`${process.env.CLIENT_URL}/user/ticket-buy`);
     } catch (error) {
         return res.status(500).json({ success: false, message: 'Lỗi khi xử lý thanh toán', error: error.message });
     }
 };
+exports.paymentCancel = async (req, res) => {
+    const { orderCode } = req.query;
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+        const booking = await Booking.findOne({ orderCode }).session(session);
+        if (!booking) return res.status(404).json({ success: false, message: 'Booking không tồn tại' });
+        booking.status = 'Canceled';
+        booking.paymentStatus = 'Unpaid';
+        await booking.save({ session });
+        await Seat.updateMany(
+            { trip: booking.trip, seatNumber: { $in: booking.seatNumbers } },
+            { $set: { isAvailable: true, bookedBy: null, paymentMethod: null } },
+            { session }
+        );
+        await session.commitTransaction();
+        session.endSession();
+        res.redirect(`${process.env.CLIENT_URL}/user/ticket-buy`);
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        res.status(500).json({ success: false, message: 'Lỗi khi hủy thanh toán', error: error.message });
+    }
+};
+
+exports.getBookingHistory = async (req, res) => {
+    try {
+        // Lấy userId từ thông tin người dùng đăng nhập
+        const userId = req.user._id;
+
+        // Truy vấn danh sách các booking của người dùng, populate thêm thông tin chuyến đi
+        const bookings = await Booking.find({ user: userId })
+            .populate({
+                path: 'trip',
+                select: 'departureLocation arrivalLocation departureTime arrivalTime busType basePrice status', // Chọn các trường cần thiết từ trip
+                populate: [
+                    { path: 'departureLocation', select: 'name' }, // Lấy tên địa điểm khởi hành
+                    { path: 'arrivalLocation', select: 'name' },   // Lấy tên địa điểm đến
+                    { path: 'busType', select: 'name' },           // Lấy thông tin loại xe
+                ]
+            })
+            .sort({ createdAt: -1 }); // Sắp xếp giảm dần theo thời gian tạo
+
+        // Kiểm tra xem có lịch sử đặt vé không
+        if (!bookings || bookings.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không có lịch sử đặt vé'
+            });
+        }
+
+        // Trả về danh sách booking với thông tin chuyến đi
+        res.status(200).json({
+            success: true,
+            data: bookings
+        });
+    } catch (error) {
+        console.error("Lỗi khi lấy lịch sử đặt vé:", error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi khi lấy lịch sử đặt vé',
+            error: error.message
+        });
+    }
+};
+
 
 exports.confirmPaymentOnBoard = async (req, res) => {
     try {
