@@ -70,6 +70,7 @@ require('./utils/cron');
 // Routes
 
 const paymentRoutes = require('./routes/PaymentRoutes');
+
 app.use('/api/payment', paymentRoutes);
 
 app.use('/api/user', routerUser);
