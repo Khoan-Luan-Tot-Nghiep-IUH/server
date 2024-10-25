@@ -9,7 +9,6 @@ const moment = require('moment-timezone');
 const Company = require('../models/Company');
 const Driver = require('../models/Driver');
 
-
 exports.getSeatsByTripId = async (req, res) => {
     try {
         const { tripId } = req.params;

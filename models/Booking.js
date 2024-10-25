@@ -22,6 +22,7 @@ const BookingSchema = new mongoose.Schema({
     orderCode: {
         type: String,
         unique: true,
+        require:true,
     },
     status: {
         type: String,
