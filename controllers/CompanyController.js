@@ -143,17 +143,25 @@ const companyController = {
     toggleCompanyStatus: async (req, res) => {
         try {
             const { companyId } = req.params;
-
+    
             // Tìm công ty
             const company = await Company.findById(companyId);
             if (!company) {
                 return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
             }
-
-            // Đổi trạng thái hoạt động của công ty
+    
+            // Đảo trạng thái của công ty
             company.isActive = !company.isActive;
             await company.save();
-
+    
+            // Nếu công ty bị vô hiệu hóa, cập nhật trạng thái của tất cả các user thuộc công ty
+            if (!company.isActive) {
+                await User.updateMany({ companyId }, { isActive: false });
+            } else {
+                // Nếu công ty được kích hoạt lại, có thể kích hoạt lại user nếu cần thiết
+                await User.updateMany({ companyId }, { isActive: true });
+            }
+    
             const status = company.isActive ? 'đã được kích hoạt' : 'đã bị vô hiệu hóa';
             return res.status(200).json({ success: true, message: `Công ty ${status}.`, company });
         } catch (error) {

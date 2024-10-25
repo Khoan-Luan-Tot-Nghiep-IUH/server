@@ -219,7 +219,7 @@ exports.paymentCancel = async (req, res) => {
     try {
         const booking = await Booking.findOne({ orderCode }).session(session);
         if (!booking) return res.status(404).json({ success: false, message: 'Booking không tồn tại' });
-        booking.status = 'Canceled';
+        booking.status = 'Cancelled';
         booking.paymentStatus = 'Unpaid';
         await booking.save({ session });
         await Seat.updateMany(

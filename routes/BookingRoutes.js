@@ -8,7 +8,7 @@ module.exports = (io) => {
     const socketIoMiddleware = require('../middleware/socketIoMiddleware')(io);
     router.post('/bookings', authMiddleware.verifyToken, socketIoMiddleware, bookingController.createBooking);
     router.get('/payment-success', bookingController.paymentSuccess);
-    router.get('/payment-cancel', bookingController.paymentSuccess);
+    router.get('/payment-cancel', bookingController.paymentCancel);
     router.get('/booking-history',authMiddleware.verifyToken, bookingController.getBookingHistory);
     router.get('/bookings/:id', authMiddleware.verifyToken, bookingController.getBookingById);
 

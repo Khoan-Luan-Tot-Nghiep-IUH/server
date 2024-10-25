@@ -8,12 +8,10 @@ const { validationResult } = require('express-validator');
 const {sendVerificationCode, verifyCode } = require('../config/twilioConfig');
 const TempUser = require('../models/TempUser');
 const Voucher = require('../models/Voucher'); 
+
 const generateVoucherCode = () => {
     return 'VOUCHER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
 };
-
-
-
 const createVoucher = async (userId, discount) => {
     const code = generateVoucherCode();
     const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
@@ -29,8 +27,6 @@ const createVoucher = async (userId, discount) => {
     await voucher.save();
     return voucher;
 };
-
-
 const redeemPointsForVoucher = async (req, res) => {
     const userId = req.body.userId; 
     const pointsToRedeem = req.body.pointsToRedeem; 
@@ -206,6 +202,13 @@ const userLogin = async (req, res) => {
                 success: false,
                 msg: 'Tên người dùng không tồn tại. Vui lòng kiểm tra lại tên đăng nhập của bạn.',
                 errorType: 'user_not_found'
+            });
+        }
+        if (!user.isActive) {
+            return res.status(403).json({
+                success: false,
+                msg: 'Tài khoản hiện tại không còn hoạt động.',
+                errorType: 'account_inactive'
             });
         }
         const validPassword = await argon2.verify(user.password, password);
