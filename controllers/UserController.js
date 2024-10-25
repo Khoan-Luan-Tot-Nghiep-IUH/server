@@ -301,14 +301,20 @@ const changePassword = async (req, res) => {
 const updateUser = async (req, res) => {
     try {
         const userId = req.params.userId;
-        const { fullName, phoneNumber, email, address, birthDay ,roleId  } = req.body;
+        const { fullName, phoneNumber, email, address, birthDay, roleId, driverInfo } = req.body;
+        
+        // Kiểm tra vai trò không thể cập nhật
         if (roleId === 'superadmin' || roleId === 'companyadmin') {
             return res.status(403).json({ success: false, msg: 'Bạn không thể cập nhật vai trò này' });
         }   
+        
+        // Tìm người dùng
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ success: false, msg: 'Không tìm thấy người dùng' });
         }
+        
+        // Kiểm tra email trùng lặp
         if (email && (email !== user.email)) {
             const existingUser = await User.findOne({ email: email });
             if (existingUser) {
@@ -329,6 +335,20 @@ const updateUser = async (req, res) => {
             },
             { new: true }
         ).select('-password');
+
+        if (user.roleId === 'driver' && driverInfo) {
+            const { licenseNumber, companyId, bustypeId, trips, isActive } = driverInfo;
+            await Driver.findOneAndUpdate(
+                { userId: userId },
+                {
+                    $set: {
+                        licenseNumber: licenseNumber,
+                    }
+                },
+                { new: true, upsert: true }
+            );
+        }
+
         return res.status(200).json({ success: true, msg: 'Cập nhật thông tin thành công', data: updatedUser });
     } catch (error) {
         return res.status(500).json({ success: false, msg: 'Cập nhật thông tin thất bại', error: error.message });
