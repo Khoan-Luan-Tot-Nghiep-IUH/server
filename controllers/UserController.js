@@ -321,6 +321,8 @@ const updateUser = async (req, res) => {
                 return res.status(400).json({ success: false, msg: 'Email đã được sử dụng' });
             }
         }
+        
+        // Cập nhật thông tin người dùng
         const updatedUser = await User.findByIdAndUpdate(
             userId,
             {
@@ -336,6 +338,7 @@ const updateUser = async (req, res) => {
             { new: true }
         ).select('-password');
 
+        // Nếu vai trò là Driver, cập nhật bảng Driver nếu có thông tin
         if (user.roleId === 'driver' && driverInfo) {
             const { licenseNumber, companyId, bustypeId, trips, isActive } = driverInfo;
             await Driver.findOneAndUpdate(
