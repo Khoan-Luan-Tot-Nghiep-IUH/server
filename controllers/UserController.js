@@ -136,7 +136,10 @@ const userRegister = async (req, res) => {
         if (existingUserByUserName) {
             return res.status(400).json({ success: false, msg: 'Tên người dùng đã được sử dụng' });
         }
-
+        const existingUserByPhoneNumber = await TempUser.findOne({ phoneNumber });
+        if (existingUserByPhoneNumber) {
+            return res.status(400).json({ success: false, msg: 'Số điện thoại đã được sử dụng' });
+        }
         const status = await sendVerificationCode(phoneNumber);
 
         if (status !== 'pending') {
@@ -449,6 +452,28 @@ const searchUsers = async (req, res) => {
         res.status(500).json({ success: false, msg: 'Tìm kiếm người dùng thất bại', error: error.message });
     }
 };
+
+const getAllUsersByLastLogin = async (req, res) => {
+    try {
+        const users = await User.find({})
+            .sort({ lastLogin: -1 }) // Sắp xếp theo lastLogin giảm dần
+            .exec();
+
+        res.status(200).json({
+            success: true,
+            msg: 'Lấy danh sách người dùng thành công',
+            users,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            msg: 'Lỗi khi lấy danh sách người dùng. Vui lòng thử lại sau.',
+            error: error.message,
+        });
+    }
+};
+
+
 module.exports = {
     sendResetPasswordEmail,
     resetPassword,
@@ -464,4 +489,5 @@ module.exports = {
     searchUsers,
     confirmRegistration,
     redeemPointsForVoucher,
+    getAllUsersByLastLogin
 };

@@ -65,13 +65,10 @@ const feedbackRoutes = require('./routes/FeedbackRoutes');
 const seatRoutes = require('./routes/SeatRoutes'); 
 const companyRoutes = require('./routes/CompanyRoutes');
 const DriverRoutes = require('./routes/DriverRoutes');
+const RevenueRoutes = require('./routes/RevenueRoutes');
 require('./utils/cron');
 
-// Routes
 
-const paymentRoutes = require('./routes/PaymentRoutes');
-
-app.use('/api/payment', paymentRoutes);
 
 app.use('/api/user', routerUser);
 app.use('/api', tripRoutes);
@@ -82,6 +79,7 @@ app.use('/api', feedbackRoutes);
 app.use('/api', seatRoutes); 
 app.use('/api/companies',companyRoutes);
 app.use('/api', DriverRoutes);
+app.use('/api',RevenueRoutes)
 
 io.on('connection', (socket) => {
     console.log('A user connected');
