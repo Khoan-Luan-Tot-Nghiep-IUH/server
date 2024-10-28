@@ -81,5 +81,6 @@ router.use(authMiddleware.isSuperAdmin);
 router.get('/superadmin', (req, res) => {
   res.status(200).json({ message: 'Access granted to superadmin route' });
 });
+router.get('/getLastLoginUser',authMiddleware.verifyToken,authMiddleware.isSuperAdmin,userController.getAllUsersByLastLogin);
 
 module.exports = router;

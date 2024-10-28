@@ -219,7 +219,7 @@ exports.paymentCancel = async (req, res) => {
     try {
         const booking = await Booking.findOne({ orderCode }).session(session);
         if (!booking) return res.status(404).json({ success: false, message: 'Booking không tồn tại' });
-        booking.status = 'Canceled';
+        booking.status = 'Cancelled';
         booking.paymentStatus = 'Unpaid';
         await booking.save({ session });
         await Seat.updateMany(
@@ -434,4 +434,32 @@ exports.getBookingById = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Failed to get booking', error: error.message });
     }
 };
+
+exports.getRevenueStatistics = async (req, res) => {
+    try {
+        const { fromDate, toDate, tripId } = req.query; // Nhận thêm tripId nếu muốn thống kê theo chuyến đi
+
+        const filter = { paymentStatus: 'Paid' };
+        if (fromDate && toDate) {
+            filter.createdAt = { $gte: new Date(fromDate), $lte: new Date(toDate) };
+        }
+        if (tripId) {
+            filter.trip = tripId; // Lọc theo chuyến đi
+        }
+
+        const bookings = await Booking.find(filter);
+        const totalRevenue = bookings.reduce((total, booking) => total + booking.totalPrice, 0);
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                totalRevenue,
+                totalBookings: bookings.length
+            }
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'Lỗi khi lấy thống kê doanh thu', error: error.message });
+    }
+};
+
 

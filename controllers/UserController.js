@@ -8,12 +8,10 @@ const { validationResult } = require('express-validator');
 const {sendVerificationCode, verifyCode } = require('../config/twilioConfig');
 const TempUser = require('../models/TempUser');
 const Voucher = require('../models/Voucher'); 
+
 const generateVoucherCode = () => {
     return 'VOUCHER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
 };
-
-
-
 const createVoucher = async (userId, discount) => {
     const code = generateVoucherCode();
     const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
@@ -29,8 +27,6 @@ const createVoucher = async (userId, discount) => {
     await voucher.save();
     return voucher;
 };
-
-
 const redeemPointsForVoucher = async (req, res) => {
     const userId = req.body.userId; 
     const pointsToRedeem = req.body.pointsToRedeem; 
@@ -140,7 +136,10 @@ const userRegister = async (req, res) => {
         if (existingUserByUserName) {
             return res.status(400).json({ success: false, msg: 'Tên người dùng đã được sử dụng' });
         }
-
+        const existingUserByPhoneNumber = await TempUser.findOne({ phoneNumber });
+        if (existingUserByPhoneNumber) {
+            return res.status(400).json({ success: false, msg: 'Số điện thoại đã được sử dụng' });
+        }
         const status = await sendVerificationCode(phoneNumber);
 
         if (status !== 'pending') {
@@ -206,6 +205,13 @@ const userLogin = async (req, res) => {
                 success: false,
                 msg: 'Tên người dùng không tồn tại. Vui lòng kiểm tra lại tên đăng nhập của bạn.',
                 errorType: 'user_not_found'
+            });
+        }
+        if (!user.isActive) {
+            return res.status(403).json({
+                success: false,
+                msg: 'Tài khoản hiện tại không còn hoạt động.',
+                errorType: 'account_inactive'
             });
         }
         const validPassword = await argon2.verify(user.password, password);
@@ -446,6 +452,28 @@ const searchUsers = async (req, res) => {
         res.status(500).json({ success: false, msg: 'Tìm kiếm người dùng thất bại', error: error.message });
     }
 };
+
+const getAllUsersByLastLogin = async (req, res) => {
+    try {
+        const users = await User.find({})
+            .sort({ lastLogin: -1 }) // Sắp xếp theo lastLogin giảm dần
+            .exec();
+
+        res.status(200).json({
+            success: true,
+            msg: 'Lấy danh sách người dùng thành công',
+            users,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            msg: 'Lỗi khi lấy danh sách người dùng. Vui lòng thử lại sau.',
+            error: error.message,
+        });
+    }
+};
+
+
 module.exports = {
     sendResetPasswordEmail,
     resetPassword,
@@ -461,4 +489,5 @@ module.exports = {
     searchUsers,
     confirmRegistration,
     redeemPointsForVoucher,
+    getAllUsersByLastLogin
 };

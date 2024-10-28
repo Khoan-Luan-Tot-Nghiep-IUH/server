@@ -66,6 +66,9 @@ const authMiddleware = {
     },
 
     isCompanyAdmin: (req, res, next) => {
+        if (req.user.roleId === 'superadmin') {
+            return next(); // Cho phép superadmin tiếp tục
+        }
         if (req.user && req.user.roleId === 'companyadmin') {
             next();
         } else {
