@@ -214,7 +214,7 @@ exports.updateTripDrivers = async (req, res) => {
             });
         }
 
-        // Validate all drivers exist and belong to company
+        // Validate all drivers exist and belong to company, then extract userIds
         const drivers = await Driver.find({
             _id: { $in: driverObjectIds },
             companyId: new mongoose.Types.ObjectId(companyId),
@@ -228,6 +228,10 @@ exports.updateTripDrivers = async (req, res) => {
             });
         }
 
+        // Lấy `userId` từ `Driver` và lưu vào `drivers` của `Trip`
+        const userIds = drivers.map(driver => driver.userId);
+
+        // Kiểm tra xung đột chuyến đi với tài xế mới
         const tripStartTime = moment(trip.departureTime);
         const tripEndTime = moment(trip.arrivalTime);
 
@@ -235,20 +239,20 @@ exports.updateTripDrivers = async (req, res) => {
             _id: { $ne: new mongoose.Types.ObjectId(tripId) },
             departureTime: { $lt: tripEndTime.toDate() },
             arrivalTime: { $gt: tripStartTime.toDate() },
-            drivers: { $in: driverObjectIds }
+            drivers: { $in: userIds }
         });
 
         if (overlappingTrips.length > 0) {
             const overlappingDrivers = overlappingTrips.reduce((acc, trip) => {
-                const overlapping = trip.drivers.filter(driverId => 
-                    driverObjectIds.some(id => id.equals(driverId))
+                const overlapping = trip.drivers.filter(userId => 
+                    userIds.some(id => id.equals(userId))
                 );
                 return [...acc, ...overlapping];
             }, []);
 
             const uniqueOverlappingDrivers = [...new Set(overlappingDrivers.map(id => id.toString()))];
             const conflictingDrivers = await Driver.find({
-                _id: { $in: uniqueOverlappingDrivers }
+                userId: { $in: uniqueOverlappingDrivers }
             }, 'licenseNumber');
 
             return res.status(400).json({
@@ -257,59 +261,25 @@ exports.updateTripDrivers = async (req, res) => {
                 conflictingDrivers: conflictingDrivers.map(d => d.licenseNumber)
             });
         }
-        const oldDriverIds = trip.drivers || [];
-        const driversToRemove = oldDriverIds.filter(id => 
-            !driverObjectIds.some(newId => newId.equals(id))
-        );
-        
-        if (driversToRemove.length > 0) {
-            await Driver.updateMany(
-                { _id: { $in: driversToRemove } },
-                { $pull: { trips: tripId } }
-            );
-        }
 
-        const newDriverIds = driverObjectIds.filter(id => 
-            !oldDriverIds.some(oldId => oldId.equals(id))
-        );
-        
-        if (newDriverIds.length > 0) {
-            await Driver.updateMany(
-                { _id: { $in: newDriverIds } },
-                { $addToSet: { trips: tripId } }
-            );
-        }
-
-        trip.drivers = driverObjectIds;
+        // Cập nhật `drivers` trong `Trip` với `userIds`
+        trip.drivers = userIds;
         await trip.save();
 
+        // Xử lý đồng bộ với chuyến đi khứ hồi (nếu có)
         if (trip.isRoundTrip && trip.returnTripId) {
             const returnTrip = await Trip.findById(trip.returnTripId);
             if (returnTrip) {
-                returnTrip.drivers = driverObjectIds;
+                returnTrip.drivers = userIds;
                 await returnTrip.save();
-                if (driversToRemove.length > 0) {
-                    await Driver.updateMany(
-                        { _id: { $in: driversToRemove } },
-                        { $pull: { trips: returnTrip._id } }
-                    );
-                }
-                if (newDriverIds.length > 0) {
-                    await Driver.updateMany(
-                        { _id: { $in: newDriverIds } },
-                        { $addToSet: { trips: returnTrip._id } }
-                    );
-                }
             }
         }
+
+        // Populate để trả về kết quả chi tiết
         const updatedTrip = await Trip.findById(tripId)
             .populate({
                 path: 'drivers',
-                select: 'licenseNumber userId',
-                populate: {
-                    path: 'userId',
-                    select: 'fullName phoneNumber email'
-                }
+                select: 'fullName phoneNumber email'
             })
             .populate('returnTripId');
 
