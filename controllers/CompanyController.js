@@ -3,7 +3,9 @@ const Company = require('../models/Company');
 const User = require('../models/User');
 const Driver = require('../models/Driver');
 const SalaryRecord = require('../models/SalaryRecord');
-
+const Trip = require('../models/Trip');
+const { default: mongoose } = require('mongoose');
+const Booking = require('../models/Booking');
 const companyController = {
     createCompany: async (req, res) => {
         try {
@@ -92,7 +94,6 @@ const companyController = {
             return res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách công ty.', error: error.message });
         }
     },
-
     getCompanyById: async (req, res) => {
         try {
             const company = await Company.findById(req.params.companyId).populate('employees.userId', '-password');
@@ -427,6 +428,7 @@ const companyController = {
           return res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách tài xế.', error: error.message });
         }
      },
+     //đã thành công api này nhưng chưa gọi lên giao diện
     calculateAndRecordDriverSalary : async (req, res) => {
         try {
             const { driverId, startDate, endDate } = req.body;
@@ -478,6 +480,103 @@ const companyController = {
         } catch (error) {
             console.error('Error calculating salary:', error);
             return res.status(500).json({ success: false, message: 'Lỗi khi tính lương cho tài xế.', error: error.message });
+        }
+    },
+    getCompletedTripsByMonth: async (req, res) => {
+        try {
+            const companyId = req.user.companyId; 
+            const year = new Date().getFullYear(); 
+            const trips = await Trip.aggregate([
+                {
+                    $match: {
+                        companyId: new mongoose.Types.ObjectId(companyId),
+                        status: 'Completed', 
+                        departureTime: {
+                            $gte: new Date(`${year}-01-01`),
+                            $lt: new Date(`${year + 1}-01-01`),
+                        },
+                    },
+                },
+                {
+                    $group: {
+                        _id: { $month: "$departureTime" },
+                        count: { $sum: 1 },
+                    },
+                },
+                { $sort: { "_id": 1 } }, // Sắp xếp theo tháng
+            ]);
+    
+            // Định dạng lại dữ liệu để gửi về client
+            const result = Array(12).fill(0).map((_, index) => {
+                const monthData = trips.find((t) => t._id === index + 1);
+                return monthData ? monthData.count : 0;
+            });
+    
+            res.json({ success: true, data: result });
+        } catch (error) {
+            res.status(500).json({ success: false, message: 'Lỗi khi lấy số chuyến đi đã hoàn thành.', error: error.message });
+        }
+    },
+    getRevenueByPaymentMethod : async (req, res) => {
+        try {
+            const revenueData = await Booking.aggregate([
+                {
+                    $match: { paymentStatus: 'Paid' }
+                },
+                {
+                    $group: {
+                        _id: "$paymentMethod", 
+                        totalRevenue: { $sum: "$totalPrice" }
+                    }
+                }
+            ]);
+    
+            const formattedData = revenueData.map((d) => ({
+                method: d._id,
+                revenue: d.totalRevenue
+            }));
+    
+            return res.status(200).json({ success: true, data: formattedData });
+        } catch (error) {
+            console.error('Lỗi khi lấy doanh thu theo phương thức thanh toán:', error);
+            res.status(500).json({ success: false, message: 'Lỗi khi lấy doanh thu theo phương thức thanh toán.' });
+        }
+    },
+    getRevenueByTimeRange : async (req, res) => {
+        try {
+            const { startDate, endDate, timeFrame } = req.query;
+    
+            // Chuyển đổi thời gian cho phù hợp
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            const groupFormat = timeFrame === 'year' ? '%Y' : timeFrame === 'month' ? '%Y-%m' : '%Y-%m-%d';
+    
+            // Lấy dữ liệu doanh thu
+            const revenueData = await Booking.aggregate([
+                {
+                    $match: {
+                        paymentStatus: 'Paid',
+                        bookingDate: { $gte: start, $lte: end }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { $dateToString: { format: groupFormat, date: "$bookingDate" } },
+                        totalRevenue: { $sum: "$totalPrice" }
+                    }
+                },
+                { $sort: { "_id": 1 } }
+            ]);
+    
+            const formattedData = revenueData.map((d) => ({
+                date: d._id,
+                revenue: d.totalRevenue
+            }));
+    
+            res.status(200).json({ success: true, data: formattedData });
+        } catch (error) {
+            console.error('Lỗi khi lấy doanh thu theo khoảng thời gian:', error);
+            res.status(500).json({ success: false, message: 'Lỗi khi lấy doanh thu theo khoảng thời gian.', error: error.message });
         }
     },
 };

@@ -16,9 +16,12 @@ router.post('/add-driver', authMiddleware.verifyToken, authMiddleware.isCompanyA
 router.delete('/drivers/:driverId', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.deleteDriver);
 router.put('/drivers/:driverId', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.updateDriver);
 router.get('/drivers', authMiddleware.verifyToken,authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.getDriversByCompany);
+router.get('/completed-trips-by-month', authMiddleware.verifyToken,authMiddleware.checkCompanyAccess, companyController.getCompletedTripsByMonth);
+router.get('/revenue-by-payment-method', authMiddleware.verifyToken,authMiddleware.checkCompanyAccess ,companyController.getRevenueByPaymentMethod);
 
+router.get('/revenue-by-time', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.getRevenueByTimeRange);
 
-router.post('/calculate-salary', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, companyController.calculateAndRecordDriverSalary);
+router.post('/calculate-salary', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.calculateAndRecordDriverSalary);
 
 
 // Public Routes (Lấy danh sách công ty)
