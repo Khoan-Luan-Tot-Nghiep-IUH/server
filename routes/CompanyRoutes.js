@@ -14,6 +14,9 @@ router.post('/add-staff', authMiddleware.verifyToken, authMiddleware.isCompanyAd
 router.delete('/:companyId/remove-employee/:userId', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.removeEmployee);
 router.post('/add-driver', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.createDriver);
 router.get('/drivers', authMiddleware.verifyToken,authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.getDriversByCompany);
+router.post('/calculate-salary', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, companyController.calculateAndRecordDriverSalary);
+
+
 // Public Routes (Lấy danh sách công ty)
 router.get('/', authMiddleware.verifyToken, companyController.getAllCompanies);
 

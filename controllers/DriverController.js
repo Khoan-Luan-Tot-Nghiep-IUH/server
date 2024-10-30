@@ -1,5 +1,7 @@
+const mongoose = require('mongoose');
 const Driver = require('../models/Driver');
 const Trip = require('../models/Trip');
+const Booking = require('../models/Booking');
 
 const getDriverTrips = async (req, res) => {
     try {
@@ -46,88 +48,161 @@ const updateTripStatus = async (req, res) => {
         const { tripId } = req.params;
         const { status } = req.body;
 
-        // Define allowed status values
+
         const allowedStatuses = ['Scheduled', 'Ongoing', 'Delayed', 'Cancelled', 'Completed'];
 
-        // Validate the status input
+
         if (!allowedStatuses.includes(status)) {
             return res.status(400).json({ success: false, message: 'Trạng thái không hợp lệ.' });
         }
 
-        // Find the trip by ID
+
+        const trip = await Trip.findById(tripId);
+        if (!trip) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy chuyến đi.' });
+        }
+        if (!trip.drivers.includes(req.user._id)) {
+            return res.status(403).json({ success: false, message: 'Bạn không có quyền cập nhật chuyến đi này.' });
+        }
+
+        // Cập nhật trạng thái chuyến đi
+        trip.status = status;
+        await trip.save();
+
+        // Nếu trạng thái là 'Completed', thêm chuyến đi vào danh sách `completedTrips` của tài xế
+        if (status === 'Completed') {
+            await Driver.findOneAndUpdate(
+                { userId: req.user._id },
+                { $addToSet: { completedTrips: trip._id } }
+            );
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Cập nhật trạng thái chuyến đi thành công.',
+            trip
+        });
+    } catch (error) {
+        console.error('Error updating trip status:', error); 
+        res.status(500).json({ success: false, message: 'Lỗi khi cập nhật trạng thái chuyến đi.', error: error.message });
+    }
+};
+
+
+const getTripPassengers = async (req, res) => {
+    try {
+        const { tripId } = req.params;
+        
+        const trip = await Trip.findById(tripId);
+        if (!trip) {
+            return res.status(404).json({ success: false, message: 'Chuyến đi không tồn tại.' });
+        }
+        const driverId = new mongoose.Types.ObjectId(req.user._id);
+        const driverIds = trip.drivers.map(driver => driver.toString());
+
+        if (!driverIds.includes(driverId.toString())) {
+            return res.status(403).json({ success: false, message: 'Bạn không có quyền truy cập vào danh sách hành khách của chuyến đi này.' });
+        }
+
+        const passengers = await Booking.find({ trip: tripId })
+            .populate('user', 'fullName email phone')
+            .select('user isCheckedIn'); 
+
+        const formattedPassengers = passengers.map(passenger => ({
+            bookingId: passenger._id,
+            userId: passenger.user._id,
+            fullName: passenger.user.fullName,
+            email: passenger.user.email,
+            phone: passenger.user.phone,
+            isCheckedIn: passenger.isCheckedIn
+        }));
+
+        res.status(200).json({ success: true, passengers: formattedPassengers });
+    } catch (error) {
+        console.error('Error details:', error);
+        res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách hành khách.', error: error.message });
+    }
+};
+
+//xacs nhan hanh khach da len xe
+const checkInPassenger = async (req, res) => {
+    try {
+        const { tripId, bookingId } = req.params;
+
+
         const trip = await Trip.findById(tripId);
         if (!trip) {
             return res.status(404).json({ success: false, message: 'Không tìm thấy chuyến đi.' });
         }
 
-        // Find the driver by userId to verify if the user is a driver
-        const driver = await Driver.findOne({ userId: req.user._id });
-        if (!driver || !trip.drivers.includes(driver._id)) {
-            return res.status(403).json({ success: false, message: 'Bạn không có quyền cập nhật chuyến đi này.' });
-        }
-
-        // Update the trip status
-        trip.status = status;
-        await trip.save();
-
-        res.status(200).json({ success: true, message: 'Cập nhật trạng thái chuyến đi thành công.', trip });
-    } catch (error) {
-        console.error('Error updating trip status:', error);  // Log error for debugging
-        res.status(500).json({ success: false, message: 'Lỗi khi cập nhật trạng thái chuyến đi.', error: error.message });
-    }
-};
-
-// Lấy danh sách hành khách của chuyến đi
-const getTripPassengers = async (req, res) => {
-    try {
-        const { tripId } = req.params;
-
-        const trip = await Trip.findById(tripId).populate('passengers');
-        if (!trip) {
-            return res.status(404).json({ success: false, message: 'Không tìm thấy chuyến đi.' });
-        }
-
-        // Chỉ tài xế của chuyến đi mới có quyền xem hành khách
-        if (trip.driverId.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ success: false, message: 'Bạn không có quyền xem hành khách của chuyến đi này.' });
-        }
-
-        res.status(200).json({ success: true, passengers: trip.passengers });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách hành khách.', error: error.message });
-    }
-};
-
-// Xác nhận hành khách đã lên xe
-const checkInPassenger = async (req, res) => {
-    try {
-        const { tripId, passengerId } = req.params;
-
-        const trip = await Trip.findById(tripId).populate('passengers');
-        if (!trip) {
-            return res.status(404).json({ success: false, message: 'Không tìm thấy chuyến đi.' });
-        }
-
-        // Chỉ tài xế của chuyến đi mới có quyền xác nhận hành khách
-        if (trip.driverId.toString() !== req.user._id.toString()) {
+        const driverIds = trip.drivers.map(driver => driver.toString());
+        if (!driverIds.includes(req.user._id.toString())) {
             return res.status(403).json({ success: false, message: 'Bạn không có quyền xác nhận hành khách của chuyến đi này.' });
         }
 
-        const passenger = trip.passengers.find(p => p._id.toString() === passengerId);
-        if (!passenger) {
-            return res.status(404).json({ success: false, message: 'Không tìm thấy hành khách.' });
+
+        const booking = await Booking.findOne({ _id: bookingId, trip: tripId });
+        if (!booking) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy booking cho hành khách này.' });
         }
 
-        passenger.isCheckedIn = true;
-        await trip.save();
+        if (booking.paymentMethod === 'OnBoard' && booking.paymentStatus === 'Unpaid') {
+            booking.paymentStatus = 'Paid';
+            booking.isCheckedIn = true;
+            await booking.save();
 
-        res.status(200).json({ success: true, message: 'Xác nhận hành khách đã lên xe thành công.', passenger });
+            return res.status(200).json({
+                success: true,
+                message: 'Hành khách đã thanh toán tiền mặt và được xác nhận lên xe thành công.',
+                data: {
+                    bookingId: booking._id,
+                    userId: booking.user,
+                    isCheckedIn: booking.isCheckedIn,
+                    paymentMethod: booking.paymentMethod,
+                    paymentStatus: booking.paymentStatus
+                }
+            });
+        }
+        booking.isCheckedIn = true;
+        await booking.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Xác nhận hành khách đã lên xe thành công.',
+            data: {
+                bookingId: booking._id,
+                userId: booking.user,
+                isCheckedIn: booking.isCheckedIn,
+                paymentMethod: booking.paymentMethod,
+                paymentStatus: booking.paymentStatus
+            }
+        });
     } catch (error) {
+        console.error('Error checking in passenger:', error);
         res.status(500).json({ success: false, message: 'Lỗi khi xác nhận hành khách.', error: error.message });
     }
 };
 
-// Báo cáo sự cố của chuyến đi
+const getCompletedTripCount = async (req, res) => {
+    try {
+        const driver = await Driver.findOne({ userId: req.user._id }).select('completedTrips');
+        if (!driver) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy tài xế.' });
+        }
+        const completedTripCount = driver.completedTrips.length;
+
+        res.status(200).json({
+            success: true,
+            message: 'Lấy số chuyến đi hoàn thành thành công.',
+            completedTripCount
+        });
+    } catch (error) {
+        console.error('Error fetching completed trip count:', error);
+        res.status(500).json({ success: false, message: 'Lỗi khi lấy số chuyến đi hoàn thành.', error: error.message });
+    }
+};
+
+
 const reportTripIssue = async (req, res) => {
     try {
         const { tripId } = req.params;
@@ -181,5 +256,6 @@ module.exports = {
     getTripPassengers,
     checkInPassenger,
     reportTripIssue,
-    updateDriverInfo
+    updateDriverInfo,
+    getCompletedTripCount 
 };

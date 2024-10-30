@@ -2,10 +2,7 @@ const mongoose = require('mongoose');
 const Trip = require('../models/Trip');
 const Seat = require('../models/Seat');
 const Booking = require('../models/Booking');
-const { calculateTripPrice } = require('./PricingController');
 const User = require('../models/User');
-const Passenger = require('../models/Passenger');
-
 const PayOS = require('@payos/node');
 const dotenv = require('dotenv');
 dotenv.config();
@@ -32,17 +29,22 @@ exports.createBooking = async (req, res) => {
 
         const MAX_SEATS_PER_BOOKING = 4;
 
-        // Loại bỏ các ghế trùng lặp trong seatNumbers
         const uniqueSeatNumbers = [...new Set(seatNumbers)];
-
-        // Xác thực đầu vào
+        const userBookings = await Booking.find({
+            user: userId,
+            trip: tripId,
+        }).session(session);
+        
+        const totalSeatsBooked = userBookings.reduce((acc, booking) => acc + booking.seatNumbers.length, 0);
+        if (totalSeatsBooked + uniqueSeatNumbers.length > MAX_SEATS_PER_BOOKING) {
+            throw new Error(`Bạn chỉ được đặt tối đa ${MAX_SEATS_PER_BOOKING} ghế cho mỗi chuyến đi`);
+        }
         if (uniqueSeatNumbers.length > MAX_SEATS_PER_BOOKING) {
             throw new Error(`Chỉ được đặt tối đa ${MAX_SEATS_PER_BOOKING} ghế trong một lần đặt`);
         }
         if (!tripId) throw new Error('Mã chuyến đi là bắt buộc');
         if (!uniqueSeatNumbers || uniqueSeatNumbers.length === 0) throw new Error('Phải chọn số ghế trước khi đặt vé');
 
-        // Kiểm tra chuyến đi
         const trip = await Trip.findById(tripId).session(session).lean();
         if (!trip) throw new Error('Chuyến đi không tồn tại');
         
@@ -51,29 +53,24 @@ exports.createBooking = async (req, res) => {
         }
         let totalPrice = 0;
 
-        // Kiểm tra trạng thái ghế đã được đặt
         const seats = await Seat.find({
             trip: tripId,
             seatNumber: { $in: uniqueSeatNumbers },
         }).session(session).lean();
 
-        // Lọc ra các ghế đã bị đặt bởi người dùng khác hoặc bởi chính người dùng với phương thức khác
         const unavailableSeats = seats.filter(seat => {
             return (
                 seat.isAvailable === false && 
                 (seat.bookedBy.toString() !== userId.toString() || 
-                 seat.paymentMethod !== paymentMethod) // Ghế đã được đặt bằng phương thức khác
+                 seat.paymentMethod !== paymentMethod)
             );
         });
-
         if (unavailableSeats.length > 0) {
             const unavailableSeatNumbers = unavailableSeats.map(seat => seat.seatNumber);
             throw new Error(`Các ghế sau đã được đặt trước: ${unavailableSeatNumbers.join(', ')}`);
         }
 
         totalPrice = seats.reduce((acc, seat) => acc + seat.price, 0);
-
-        // Kiểm tra booking chưa thanh toán của người dùng
         let existingBooking = await Booking.findOne({
             user: userId,
             trip: tripId,
@@ -83,12 +80,10 @@ exports.createBooking = async (req, res) => {
 
         let booking;
         if (existingBooking) {
-            // Nếu đã có booking OnBoard chưa thanh toán, gộp thêm ghế mới vào
             existingBooking.seatNumbers = [...new Set([...existingBooking.seatNumbers, ...uniqueSeatNumbers])];
             existingBooking.totalPrice += totalPrice;
             booking = existingBooking;
         } else {
-            // Nếu chưa có booking hoặc phương thức thanh toán khác, tạo booking mới
             booking = new Booking({
                 user: userId,
                 trip: tripId,
@@ -99,20 +94,14 @@ exports.createBooking = async (req, res) => {
                 paymentStatus: 'Unpaid',
             });
         }
-
-        // Lưu orderCode cho booking mới
         const orderCode = generateOrderCode(booking._id);
         booking.orderCode = orderCode;
         await booking.save({ session });
-
-        // Cập nhật trạng thái ghế đã được đặt
         await Seat.updateMany(
             { trip: tripId, seatNumber: { $in: uniqueSeatNumbers } },
-            { $set: { isAvailable: false, bookedBy: userId, paymentMethod: paymentMethod } }, // Cập nhật phương thức thanh toán
+            { $set: { isAvailable: false, bookedBy: userId, paymentMethod: paymentMethod } },
             { session }
         );
-
-        // Xử lý chuyến khứ hồi nếu có
         if (includeReturnTrip && trip.isRoundTrip && trip.returnTripId) {
             const returnTripId = trip.returnTripId;
             const returnTrip = await Trip.findById(returnTripId).session(session).lean();
@@ -146,8 +135,6 @@ exports.createBooking = async (req, res) => {
 
             await returnBooking.save({ session });
         }
-
-        // Xử lý thanh toán nếu phương thức là Online
         if (paymentMethod === 'Online') {
             const body = {
                 orderCode,
@@ -212,6 +199,7 @@ exports.paymentSuccess = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Lỗi khi xử lý thanh toán', error: error.message });
     }
 };
+
 exports.paymentCancel = async (req, res) => {
     const { orderCode } = req.query;
     const session = await mongoose.startSession();
@@ -435,9 +423,12 @@ exports.getBookingById = async (req, res) => {
     }
 };
 
+
+
+//Thống kê cho supperAdmin
 exports.getRevenueStatistics = async (req, res) => {
     try {
-        const { fromDate, toDate, tripId } = req.query; // Nhận thêm tripId nếu muốn thống kê theo chuyến đi
+        const { fromDate, toDate, tripId } = req.query;
 
         const filter = { paymentStatus: 'Paid' };
         if (fromDate && toDate) {
@@ -461,5 +452,85 @@ exports.getRevenueStatistics = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Lỗi khi lấy thống kê doanh thu', error: error.message });
     }
 };
+
+// thống kê doanh số và số vé bán được theo công ty
+exports.calculateRevenueByCompany = async (req, res) => {
+    try {
+        const { startDate, endDate, companyId } = req.query;
+
+        // Khởi tạo bộ lọc `bookingFilter` cho `bookingDate`
+        const bookingFilter = {};
+        if (startDate || endDate) {
+            bookingFilter['bookingDate'] = {};
+            if (startDate) bookingFilter['bookingDate'].$gte = new Date(startDate);
+            if (endDate) bookingFilter['bookingDate'].$lte = new Date(endDate);
+        }
+
+        const revenueByCompany = await Booking.aggregate([
+            // Áp dụng bộ lọc `bookingDate` ngay từ đầu trên `Booking`
+            {
+                $match: bookingFilter
+            },
+            // Liên kết `Booking` với `Trip` để lấy `companyId` từ `Trip`
+            {
+                $lookup: {
+                    from: 'trips',
+                    localField: 'trip',
+                    foreignField: '_id',
+                    as: 'tripDetails'
+                }
+            },
+            // Giải nén `tripDetails` để dễ dàng truy cập `companyId`
+            {
+                $unwind: '$tripDetails'
+            },
+            // Lọc theo `companyId` nếu có, sau khi đã lọc theo `bookingDate`
+            {
+                $match: companyId ? { 'tripDetails.companyId': new mongoose.Types.ObjectId(companyId) } : {}
+            },
+            // Gom nhóm theo `companyId` và tính tổng doanh thu, số lượng booking, doanh thu trung bình
+            {
+                $group: {
+                    _id: '$tripDetails.companyId',
+                    totalRevenue: { $sum: '$totalPrice' },
+                    totalBookings: { $sum: 1 },
+                    averageRevenue: { $avg: '$totalPrice' }
+                }
+            },
+            // Liên kết với `Company` để lấy thông tin chi tiết về công ty
+            {
+                $lookup: {
+                    from: 'companies',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'companyDetails'
+                }
+            },
+            {
+                $unwind: '$companyDetails'
+            },
+            // Định dạng lại dữ liệu đầu ra
+            {
+                $project: {
+                    _id: 0,
+                    companyId: '$_id',
+                    companyName: '$companyDetails.name',
+                    totalRevenue: 1,
+                    totalBookings: 1,
+                    averageRevenue: { $round: ['$averageRevenue', 2] }
+                }
+            },
+            // Sắp xếp công ty theo tổng doanh thu giảm dần
+            {
+                $sort: { totalRevenue: -1 }
+            }
+        ]);
+
+        res.status(200).json({ success: true, data: revenueByCompany });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 
 

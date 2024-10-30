@@ -5,8 +5,14 @@ const authMiddleware = require('../middleware/authMiddleware');
 
 router.get('/drivers/trips', authMiddleware.verifyToken, authMiddleware.isDriver, driverController.getDriverTrips);
 router.put('/trips/:tripId/status', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, driverController.updateTripStatus);
-router.get('/trips/:tripId/passengers', authMiddleware.verifyToken, authMiddleware.isDriver, driverController.getTripPassengers);
-router.put('/trips/:tripId/passengers/:passengerId/checkin', authMiddleware.verifyToken, authMiddleware.isDriver, driverController.checkInPassenger);
+//lay danh sach hang khach da dat ve trong chuyen di
+router.get('/drivers/trips/:tripId/passengers', authMiddleware.verifyToken, authMiddleware.isDriver, driverController.getTripPassengers);
+
+//xac nhan hanh khach len xe
+router.put('/drivers/:tripId/passengers/:bookingId/checkin', authMiddleware.verifyToken, authMiddleware.isDriver, driverController.checkInPassenger);
+
+router.get('/drivers/completed-trips/count', authMiddleware.verifyToken, authMiddleware.isDriver, driverController.getCompletedTripCount);
+
 router.post('/trips/:tripId/report', authMiddleware.verifyToken, authMiddleware.isDriver, driverController.reportTripIssue);
 router.put('/profile', authMiddleware.verifyToken, authMiddleware.isDriver, driverController.updateDriverInfo);
 

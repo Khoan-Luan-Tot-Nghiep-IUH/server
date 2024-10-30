@@ -12,10 +12,22 @@ const DriverSchema = new mongoose.Schema({
         ref: 'Company',
         required: true
     },
+    baseSalary: {
+        type: Number,
+        default: 5000000,
+    },
+    salaryRate: { 
+        type: Number,
+        default: 100000 
+    },
     bustypeId: { 
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Bustype',
     },
+    completedTrips: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Trip'
+    }],
     trips: [{ 
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Trip'

@@ -14,5 +14,6 @@ module.exports = (io) => {
 
     router.delete('/bookings/:id', authMiddleware.verifyToken, bookingController.cancelBooking);
     router.patch('/bookings/:id/cancelSeat/:seatNumberToCancel', authMiddleware.verifyToken,bookingController.cancelSeatInBooking);
+    
     return router;
 };

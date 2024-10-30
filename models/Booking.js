@@ -42,7 +42,8 @@ const BookingSchema = new mongoose.Schema({
         type: String,
         enum: ['Paid', 'Unpaid'],
         default: 'Unpaid'
-    }
+    },
+    isCheckedIn: { type: Boolean, default: false },
 });
 
 const Booking = mongoose.model('Booking', BookingSchema);

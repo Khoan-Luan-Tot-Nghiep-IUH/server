@@ -2,6 +2,7 @@ const argon2 = require('argon2');
 const Company = require('../models/Company');
 const User = require('../models/User');
 const Driver = require('../models/Driver');
+const SalaryRecord = require('../models/SalaryRecord');
 
 const companyController = {
     createCompany: async (req, res) => {
@@ -357,6 +358,59 @@ const companyController = {
           return res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách tài xế.', error: error.message });
         }
      },
+    calculateAndRecordDriverSalary : async (req, res) => {
+        try {
+            const { driverId, startDate, endDate } = req.body;
+    
+            // Tìm tài xế và lấy danh sách các chuyến đi đã hoàn thành trong `completedTrips`
+            const driver = await Driver.findById(driverId).populate('completedTrips');
+            if (!driver) {
+                return res.status(404).json({ success: false, message: 'Không tìm thấy tài xế.' });
+            }
+    
+            // Kiểm tra nếu `salaryRate` và `baseSalary` có giá trị hợp lệ
+            if (typeof driver.salaryRate !== 'number' || isNaN(driver.salaryRate)) {
+                return res.status(400).json({ success: false, message: 'Lương mỗi chuyến đi không hợp lệ.' });
+            }
+            if (typeof driver.baseSalary !== 'number' || isNaN(driver.baseSalary)) {
+                return res.status(400).json({ success: false, message: 'Lương cơ bản không hợp lệ.' });
+            }
+    
+            // Lọc các chuyến đi hoàn thành trong khoảng thời gian kỳ lương
+            const tripsInPeriod = driver.completedTrips.filter(trip => {
+                return trip.departureTime >= new Date(startDate) && trip.departureTime <= new Date(endDate);
+            });
+    
+            const tripEarnings = tripsInPeriod.length * driver.salaryRate; // Thu nhập từ số chuyến đi
+            const totalSalary = driver.baseSalary + tripEarnings;
+    
+            // Tạo một bản ghi lương trong bảng `SalaryRecord`
+            const salaryRecord = new SalaryRecord({
+                driverId: driver._id,
+                startDate,
+                endDate,
+                baseSalary: driver.baseSalary,
+                tripEarnings,
+                totalSalary
+            });
+            await salaryRecord.save();
+    
+            // Xóa các chuyến đi đã được tính lương khỏi `completedTrips` để tránh tính lại
+            const tripIdsToRemove = tripsInPeriod.map(trip => trip._id);
+            await Driver.findByIdAndUpdate(driverId, {
+                $pull: { completedTrips: { $in: tripIdsToRemove } }
+            });
+    
+            return res.status(200).json({
+                success: true,
+                message: 'Tính lương thành công và đã lưu thông tin vào bảng lương.',
+                salaryRecord
+            });
+        } catch (error) {
+            console.error('Error calculating salary:', error);
+            return res.status(500).json({ success: false, message: 'Lỗi khi tính lương cho tài xế.', error: error.message });
+        }
+    },
 };
 
 module.exports = companyController;
