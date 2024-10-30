@@ -13,8 +13,15 @@ router.delete('/:companyId', authMiddleware.verifyToken, authMiddleware.isSuperA
 router.post('/add-staff', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.addStaff);
 router.delete('/:companyId/remove-employee/:userId', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.removeEmployee);
 router.post('/add-driver', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.createDriver);
+router.delete('/drivers/:driverId', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.deleteDriver);
+router.put('/drivers/:driverId', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.updateDriver);
 router.get('/drivers', authMiddleware.verifyToken,authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.getDriversByCompany);
-router.post('/calculate-salary', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, companyController.calculateAndRecordDriverSalary);
+router.get('/completed-trips-by-month', authMiddleware.verifyToken,authMiddleware.checkCompanyAccess, companyController.getCompletedTripsByMonth);
+router.get('/revenue-by-payment-method', authMiddleware.verifyToken,authMiddleware.checkCompanyAccess ,companyController.getRevenueByPaymentMethod);
+
+router.get('/revenue-by-time', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.getRevenueByTimeRange);
+
+router.post('/calculate-salary', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.calculateAndRecordDriverSalary);
 
 
 // Public Routes (Lấy danh sách công ty)
