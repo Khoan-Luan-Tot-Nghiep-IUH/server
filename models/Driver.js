@@ -14,12 +14,12 @@ const DriverSchema = new mongoose.Schema({
     },
     baseSalary: {
         type: Number,
-        default: 5000000,
+        required: true
     },
     salaryRate: { 
         type: Number,
-        default: 100000 
-    },
+            required: true
+        },
     bustypeId: { 
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Bustype',
