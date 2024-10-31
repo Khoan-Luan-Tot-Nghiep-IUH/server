@@ -519,18 +519,40 @@ const companyController = {
     },
     getRevenueByPaymentMethod : async (req, res) => {
         try {
+            const companyId = req.user.companyId; // Get companyId from req.user
+    
+            if (!companyId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Yêu cầu phải có mã công ty hợp lệ.',
+                });
+            }
+    
             const revenueData = await Booking.aggregate([
                 {
-                    $match: { paymentStatus: 'Paid' }
+                    $lookup: {
+                        from: 'trips',
+                        localField: 'trip',
+                        foreignField: '_id',
+                        as: 'tripDetails'
+                    }
+                },
+                { $unwind: '$tripDetails' },
+                {
+                    $match: {
+                        'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
+                        paymentStatus: 'Paid'
+                    }
                 },
                 {
                     $group: {
-                        _id: "$paymentMethod", 
-                        totalRevenue: { $sum: "$totalPrice" }
+                        _id: "$paymentMethod", // Group by payment method
+                        totalRevenue: { $sum: "$totalPrice" } // Sum total price per payment method
                     }
                 }
             ]);
     
+            // Format the response data
             const formattedData = revenueData.map((d) => ({
                 method: d._id,
                 revenue: d.totalRevenue
@@ -542,19 +564,37 @@ const companyController = {
             res.status(500).json({ success: false, message: 'Lỗi khi lấy doanh thu theo phương thức thanh toán.' });
         }
     },
-    getRevenueByTimeRange : async (req, res) => {
+     getRevenueByTimeRange : async (req, res) => {
         try {
             const { startDate, endDate, timeFrame } = req.query;
+            const companyId = req.user.companyId; // Get companyId directly from req.user
     
-            // Chuyển đổi thời gian cho phù hợp
+            if (!companyId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Yêu cầu phải có mã công ty hợp lệ.',
+                });
+            }
+    
+            // Define the date format for grouping based on the time frame
             const start = new Date(startDate);
             const end = new Date(endDate);
             const groupFormat = timeFrame === 'year' ? '%Y' : timeFrame === 'month' ? '%Y-%m' : '%Y-%m-%d';
     
-            // Lấy dữ liệu doanh thu
+            // Aggregate revenue data for the specified company
             const revenueData = await Booking.aggregate([
                 {
+                    $lookup: {
+                        from: 'trips',
+                        localField: 'trip',
+                        foreignField: '_id',
+                        as: 'tripDetails'
+                    }
+                },
+                { $unwind: '$tripDetails' },
+                {
                     $match: {
+                        'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
                         paymentStatus: 'Paid',
                         bookingDate: { $gte: start, $lte: end }
                     }
@@ -568,6 +608,7 @@ const companyController = {
                 { $sort: { "_id": 1 } }
             ]);
     
+            // Format response data
             const formattedData = revenueData.map((d) => ({
                 date: d._id,
                 revenue: d.totalRevenue
