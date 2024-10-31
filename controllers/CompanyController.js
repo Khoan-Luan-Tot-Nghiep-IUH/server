@@ -1,11 +1,15 @@
 const argon2 = require('argon2');
 const Company = require('../models/Company');
 const User = require('../models/User');
+const moment = require('moment');
 const Driver = require('../models/Driver');
 const SalaryRecord = require('../models/SalaryRecord');
 const Trip = require('../models/Trip');
 const { default: mongoose } = require('mongoose');
 const Booking = require('../models/Booking');
+const XLSX = require('xlsx');
+const fs = require('fs');
+const path = require('path');
 const companyController = {
     createCompany: async (req, res) => {
         try {
@@ -618,6 +622,112 @@ const companyController = {
         } catch (error) {
             console.error('Lỗi khi lấy doanh thu theo khoảng thời gian:', error);
             res.status(500).json({ success: false, message: 'Lỗi khi lấy doanh thu theo khoảng thời gian.', error: error.message });
+        }
+    },
+    exportRevenueToExcel: async (req, res) => {
+        try {
+            const { startDate, endDate, timeFrame } = req.query;
+            const companyId = req.user.companyId;
+
+            if (!companyId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Yêu cầu phải có mã công ty hợp lệ.',
+                });
+            }
+
+            // Định dạng groupFormat dựa vào timeFrame
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            const groupFormat = timeFrame === 'year' ? '%Y' : '%Y-%m';
+
+            // Truy vấn dữ liệu doanh thu từ database và nhóm theo chuyến đi
+            const revenueData = await Booking.aggregate([
+                {
+                    $lookup: {
+                        from: 'trips',
+                        localField: 'trip',
+                        foreignField: '_id',
+                        as: 'tripDetails'
+                    }
+                },
+                { $unwind: '$tripDetails' },
+                {
+                    $lookup: {
+                        from: 'locations',
+                        localField: 'tripDetails.departureLocation',
+                        foreignField: '_id',
+                        as: 'departureLocationDetails'
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'locations',
+                        localField: 'tripDetails.arrivalLocation',
+                        foreignField: '_id',
+                        as: 'arrivalLocationDetails'
+                    }
+                },
+                { $unwind: '$departureLocationDetails' },
+                { $unwind: '$arrivalLocationDetails' },
+                {
+                    $match: {
+                        'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
+                        paymentStatus: 'Paid',
+                        bookingDate: { $gte: start, $lte: end }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { 
+                            time: { $dateToString: { format: groupFormat, date: "$bookingDate" } },
+                            tripId: "$tripDetails._id",
+                            departureLocation: "$departureLocationDetails.name",  // Chuyển từ ObjectId thành tên địa điểm
+                            arrivalLocation: "$arrivalLocationDetails.name",  // Chuyển từ ObjectId thành tên địa điểm
+                            departureTime: "$tripDetails.departureTime",
+                            basePrice: "$tripDetails.basePrice"
+                        },
+                        totalRevenue: { $sum: "$totalPrice" }
+                    }
+                },
+                { $sort: { "_id.time": 1 } }
+            ]);
+            
+            console.log("Revenue Data:", revenueData);
+            // Chuyển đổi dữ liệu doanh thu thành định dạng JSON cho Excel
+            const data = revenueData.map(d => ({
+                ThờiGian: d._id.time,
+                MaChuyenDi: d._id.tripId.toString(),  // Chuyển tripId thành chuỗi nếu cần
+                DiemDi: d._id.departureLocation,      // Tên địa điểm khởi hành
+                DiemDen: d._id.arrivalLocation,       // Tên địa điểm đích
+                GioKhoiHanh: moment(d._id.departureTime).format('YYYY-MM-DD HH:mm'), // Định dạng thời gian
+                GiaCoBan: d._id.basePrice,
+                TongDoanhThu: d.totalRevenue
+            }));
+            
+            console.log("Data for Excel:", data);
+            // Tạo workbook và worksheet
+            const worksheet = XLSX.utils.json_to_sheet(data);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'RevenueData');
+
+            // Lưu file Excel tạm thời trên server
+            const filePath = path.join(__dirname, `Revenue_${timeFrame}_${startDate}_${endDate}.xlsx`);
+            XLSX.writeFile(workbook, filePath);
+            console.log("File saved at:", filePath);
+            // Gửi file Excel về client
+            res.download(filePath, `Revenue_${timeFrame}_${startDate}_${endDate}.xlsx`, (err) => {
+                if (err) {
+                    console.error("Error downloading file: ", err);
+                    res.status(500).json({ success: false, message: "Lỗi khi tải xuống file" });
+                }
+                // Xóa file sau khi tải về
+                fs.unlinkSync(filePath);
+                
+            });
+        } catch (error) {
+            console.error('Lỗi khi xuất dữ liệu doanh thu ra Excel:', error);
+            res.status(500).json({ success: false, message: 'Lỗi khi xuất dữ liệu doanh thu ra Excel.', error: error.message });
         }
     },
 };
