@@ -611,8 +611,6 @@ const companyController = {
                 },
                 { $sort: { "_id": 1 } }
             ]);
-    
-            // Format response data
             const formattedData = revenueData.map((d) => ({
                 date: d._id,
                 revenue: d.totalRevenue

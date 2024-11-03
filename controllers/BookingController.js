@@ -227,31 +227,26 @@ exports.paymentCancel = async (req, res) => {
 
 exports.getBookingHistory = async (req, res) => {
     try {
-        // Lấy userId từ thông tin người dùng đăng nhập
-        const userId = req.user._id;
 
-        // Truy vấn danh sách các booking của người dùng, populate thêm thông tin chuyến đi
+        const userId = req.user._id;
         const bookings = await Booking.find({ user: userId })
             .populate({
                 path: 'trip',
-                select: 'departureLocation arrivalLocation departureTime arrivalTime busType basePrice status', // Chọn các trường cần thiết từ trip
+                select: 'departureLocation arrivalLocation departureTime arrivalTime busType basePrice status',
                 populate: [
-                    { path: 'departureLocation', select: 'name' }, // Lấy tên địa điểm khởi hành
-                    { path: 'arrivalLocation', select: 'name' },   // Lấy tên địa điểm đến
-                    { path: 'busType', select: 'name' },           // Lấy thông tin loại xe
+                    { path: 'departureLocation', select: 'name' }, 
+                    { path: 'arrivalLocation', select: 'name' },   
+                    { path: 'busType', select: 'name' },         
                 ]
             })
-            .sort({ createdAt: -1 }); // Sắp xếp giảm dần theo thời gian tạo
+            .sort({ createdAt: -1 }); 
 
-        // Kiểm tra xem có lịch sử đặt vé không
         if (!bookings || bookings.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Không có lịch sử đặt vé'
             });
         }
-
-        // Trả về danh sách booking với thông tin chuyến đi
         res.status(200).json({
             success: true,
             data: bookings
