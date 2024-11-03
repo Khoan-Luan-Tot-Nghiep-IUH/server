@@ -5,17 +5,10 @@ const Booking = require('../models/Booking');
 
 const getDriverTrips = async (req, res) => {
     try {
-        const userId = req.user._id; 
-        const driver = await Driver.findOne({ userId: userId });
+        const userId = req.user._id;
 
-        if (!driver) {
-            return res.status(404).json({
-                success: false,
-                message: 'Không tìm thấy tài xế tương ứng với người dùng này'
-            });
-        }
-        const driverId = driver._id;
-        const trips = await Trip.find({ drivers: { $in: [driverId] } })
+        // Tìm chuyến đi dựa trên userId của tài xế
+        const trips = await Trip.find({ userId: userId })
             .populate('departureLocation')
             .populate('arrivalLocation');
 
@@ -41,7 +34,6 @@ const getDriverTrips = async (req, res) => {
         });
     }
 };
-
 
 const updateTripStatus = async (req, res) => {
     try {
