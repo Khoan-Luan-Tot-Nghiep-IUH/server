@@ -1,5 +1,5 @@
 # Sử dụng Node.js phiên bản phù hợp
-FROM node:16
+FROM node:14
 
 # Tạo và đặt thư mục làm việc trong container
 WORKDIR /app

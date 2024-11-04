@@ -305,13 +305,13 @@ exports.getTripsByCompany = async (req, res) => {
         const trips = await Trip.find({ companyId })
             .populate('departureLocation arrivalLocation busType')
             .populate({
-                path: 'drivers', 
-                select: 'licenseNumber userId',  
-                populate: {
-                    path: 'userId', 
-                    select: 'fullName phoneNumber email'
-                }
+                path: 'drivers',
+                model: 'User',
+                select: 'fullName phoneNumber email role',
+                match: { role: 'driver' }
             });
+            
+            
 
         // Trả về danh sách chuyến đi
         res.status(200).json({ success: true, trips });
@@ -427,16 +427,12 @@ exports.searchTrips = async (req, res) => {
             // Sử dụng ngày UTC trực tiếp, không chuyển đổi múi giờ
             const startOfDay = moment.utc(departureDate).startOf('day').toDate();
             const endOfDay = moment.utc(departureDate).endOf('day').toDate();
-        
-            console.log("Start of Day (UTC):", startOfDay);
-            console.log("End of Day (UTC):", endOfDay);
+    
         
             filter.departureTime = {
                 $gte: startOfDay,
                 $lte: endOfDay
             };
-        
-            console.log("Filter (UTC):", filter);
         }        
 
         // Lọc theo giờ khởi hành (departureTimeRange)

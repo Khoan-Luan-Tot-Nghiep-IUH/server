@@ -1,26 +1,30 @@
-// utils/cron.js
-
 const cron = require('node-cron');
-const Trip = require('../models/Trip');
+const Booking = require('../models/Booking');
+const Seat = require('../models/Seat');
 
-
-
-cron.schedule('0 0 * * *', async () => {
-    console.log('Checking for trips to auto-complete...');
-
-    const now = new Date();
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+// Lên lịch cron job chạy mỗi 10 phút
+cron.schedule('*/10 * * * *', async () => {
+    console.log('Chạy cron job mỗi 10 phút để kiểm tra và hủy các đặt vé online chưa thanh toán');
 
     try {
-        const trips = await Trip.find({ status: 'Ongoing', arrivalTime: { $lt: oneDayAgo } });
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+        const expiredBookings = await Booking.find({
+            createdAt: { $lt: tenMinutesAgo },
+            status: 'Pending',
+            paymentStatus: 'Unpaid',
+            paymentMethod: 'Online',
+        });
 
-        for (let trip of trips) {
-            trip.status = 'Completed';
-            await trip.save();
+        for (const booking of expiredBookings) {
+            await Booking.findByIdAndDelete(booking._id);
+            await Seat.updateMany(
+                { trip: booking.trip, seatNumber: { $in: booking.seatNumbers } },
+                { $set: { isAvailable: true, bookedBy: null, paymentMethod: null } }
+            );
+
+            console.log(`Đã hủy đặt vé online quá hạn: ${booking._id}`);
         }
-
-        console.log(`Automatically marked ${trips.length} trips as completed.`);
-    } catch (err) {
-        console.error('Error while completing trips:', err.message);
+    } catch (error) {
+        console.error('Lỗi trong quá trình chạy cron job:', error);
     }
 });
