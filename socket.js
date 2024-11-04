@@ -1,11 +1,8 @@
-// Server-side (socket.js)
 const mongoose = require('mongoose');
 const Seat = require('./models/Seat');
 
 module.exports = (io) => {
-    // Store active socket connections and their associated user data
     const connectedUsers = new Map();
-
     io.on('connection', (socket) => {
         console.log('User connected:', socket.id);
         socket.on('joinTrip', (tripId) => {
@@ -14,11 +11,9 @@ module.exports = (io) => {
           });          
         socket.on('reserveSeat', async ({ tripId, seatNumber, userId }) => {
             console.log('Attempting to reserve seat:', { tripId, seatNumber, userId });
-            
             const session = await mongoose.startSession();
             try {
                 await session.withTransaction(async () => {
-                    // Tìm kiếm ghế trước khi cập nhật
                     const seat = await Seat.findOne({
                         trip: tripId,
                         seatNumber,
@@ -30,18 +25,16 @@ module.exports = (io) => {
                         socket.emit('seatUnavailable', { tripId, seatNumber });
                         return;
                     }
-        
-                    // Cập nhật trạng thái ghế với version kiểm tra để thực hiện optimistic locking
                     const updatedSeat = await Seat.findOneAndUpdate(
                         {
                             _id: seat._id,
-                            version: seat.version // Sử dụng version từ ghế đã tìm thấy
+                            version: seat.version 
                         },
                         {
                             $set: {
                                 isLocked: true,
                                 lockedBy: new mongoose.Types.ObjectId(userId),
-                                lockExpiration: new Date(Date.now() + 5 * 60000) // 5 phút giữ ghế
+                                lockExpiration: new Date(Date.now() + 5 * 60000)
                             },
                             $inc: { version: 1 }
                         },
@@ -101,8 +94,6 @@ module.exports = (io) => {
 
                     if (seat) {
                         io.to(`trip:${tripId}`).emit('seatReleased', { tripId, seatNumber });
-                        
-                        // Update connected user's locked seats
                         const userData = connectedUsers.get(socket.id);
                         if (userData) {
                             userData.lockedSeats = userData.lockedSeats.filter(
@@ -126,8 +117,6 @@ module.exports = (io) => {
 
         socket.on('disconnect', async () => {
             console.log('User disconnected:', socket.id);
-            
-            // Auto-release seats locked by this user
             const userData = connectedUsers.get(socket.id);
             if (userData?.lockedSeats?.length) {
                 const session = await mongoose.startSession();
@@ -164,8 +153,6 @@ module.exports = (io) => {
             connectedUsers.delete(socket.id);
         });
     });
-
-    // Periodic cleanup of expired locks
     setInterval(async () => {
         try {
             const expiredSeats = await Seat.find({
@@ -191,5 +178,5 @@ module.exports = (io) => {
         } catch (error) {
             console.error('Error cleaning up expired locks:', error);
         }
-    }, 60000); // Run every minute
+    }, 60000); 
 };
