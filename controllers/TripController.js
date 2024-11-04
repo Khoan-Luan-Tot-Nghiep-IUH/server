@@ -305,13 +305,13 @@ exports.getTripsByCompany = async (req, res) => {
         const trips = await Trip.find({ companyId })
             .populate('departureLocation arrivalLocation busType')
             .populate({
-                path: 'drivers', 
-                select: 'licenseNumber userId',  
-                populate: {
-                    path: 'userId', 
-                    select: 'fullName phoneNumber email'
-                }
+                path: 'drivers',
+                model: 'User',
+                select: 'fullName phoneNumber email role',
+                match: { role: 'driver' }
             });
+            
+            
 
         // Trả về danh sách chuyến đi
         res.status(200).json({ success: true, trips });
