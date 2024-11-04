@@ -427,16 +427,12 @@ exports.searchTrips = async (req, res) => {
             // Sử dụng ngày UTC trực tiếp, không chuyển đổi múi giờ
             const startOfDay = moment.utc(departureDate).startOf('day').toDate();
             const endOfDay = moment.utc(departureDate).endOf('day').toDate();
-        
-            console.log("Start of Day (UTC):", startOfDay);
-            console.log("End of Day (UTC):", endOfDay);
+    
         
             filter.departureTime = {
                 $gte: startOfDay,
                 $lte: endOfDay
             };
-        
-            console.log("Filter (UTC):", filter);
         }        
 
         // Lọc theo giờ khởi hành (departureTimeRange)

@@ -54,8 +54,6 @@ const io = socketIo(server, {
     }
 });
 
-
-// Import Routes
 const routerUser = require('./routes/UserRoutes');
 const tripRoutes = require('./routes/TripRoutes');
 const locationRoutes = require('./routes/LocationRoutes');
@@ -88,6 +86,9 @@ io.on('connection', (socket) => {
     });
 });
 const path = require('path');
+
+
+require('./socket')(io);
 
 app.use(express.static(path.join(__dirname, 'build')));
 app.get('*', (req, res) => {
