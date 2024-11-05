@@ -405,6 +405,7 @@ exports.getUserBookings = async (req, res) => {
     }
 };
 
+
 exports.getBookingById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -417,8 +418,6 @@ exports.getBookingById = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Failed to get booking', error: error.message });
     }
 };
-
-
 
 //Thống kê cho supperAdmin
 exports.getRevenueStatistics = async (req, res) => {
