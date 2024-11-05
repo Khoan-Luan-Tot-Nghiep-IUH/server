@@ -19,6 +19,7 @@ router.get('/drivers', authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,
 router.get('/completed-trips-by-month', authMiddleware.verifyToken,authMiddleware.checkCompanyAccess, companyController.getCompletedTripsByMonth);
 router.get('/revenue-by-payment-method', authMiddleware.verifyToken,authMiddleware.checkCompanyAccess ,companyController.getRevenueByPaymentMethod);
 router.get('/revenue-by-time', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.getRevenueByTimeRange);
+router.patch('/employees/:userId/disable',authMiddleware.verifyToken,authMiddleware.isCompanyAdmin, companyController.toggleDriverStatus);
 
 
 // tôi chưa gọi 3 hàm này

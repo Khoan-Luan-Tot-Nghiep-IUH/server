@@ -513,8 +513,6 @@ exports.searchTrips = async (req, res) => {
             })
             .populate('departureLocation arrivalLocation busType')
             .exec();
-
-            // Đếm số ghế trống cho chuyến về
             const returnTripSeatCounts = await Seat.aggregate([
                 { $match: { trip: { $in: returnTripIds }, isAvailable: true } },
                 { $group: { _id: "$trip", availableSeats: { $sum: 1 } } }

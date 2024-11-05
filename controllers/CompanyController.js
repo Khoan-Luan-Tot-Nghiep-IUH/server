@@ -432,6 +432,38 @@ const companyController = {
           return res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách tài xế.', error: error.message });
         }
      },
+    toggleDriverStatus : async (req, res) => {
+        try {
+            const { userId } = req.params; 
+            const companyId = req.user.companyId; 
+    
+            
+            const user = await User.findById(userId);
+            if (!user || user.roleId !== 'driver' || !user.companyId.equals(companyId)) {
+                return res.status(404).json({ success: false, message: 'Người dùng không tồn tại hoặc không phải là tài xế của công ty này.' });
+            }
+            const driver = await Driver.findOne({ userId: user._id });
+            if (!driver) {
+                return res.status(404).json({ success: false, message: 'Tài xế không tồn tại trong bảng Driver.' });
+            }
+            const newStatus = !user.isActive;
+            user.isActive = newStatus;
+            driver.isActive = newStatus;
+
+            await user.save();
+            await driver.save();
+    
+            const statusMessage = newStatus ? 'đã được kích hoạt' : 'đã bị vô hiệu hóa';
+            return res.status(200).json({
+                success: true,
+                message: `Tài xế ${statusMessage}.`,
+                isActive: newStatus,
+            });
+        } catch (error) {
+            console.error('Error toggling driver status:', error);
+            return res.status(500).json({ success: false, message: 'Lỗi khi thay đổi trạng thái tài xế.', error: error.message });
+        }
+    },           
      //đã thành công api này nhưng chưa gọi lên giao diện
     calculateAndRecordDriverSalary : async (req, res) => {
         try {
