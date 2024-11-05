@@ -738,8 +738,6 @@ const companyController = {
                     message: 'Yêu cầu phải có mã công ty hợp lệ.',
                 });
             }
-    
-            // Thực hiện tổng hợp bookings để tìm người dùng đặt nhiều chuyến nhất và tổng doanh thu
             const topUsers = await Booking.aggregate([
                 {
                     $lookup: {
@@ -753,21 +751,19 @@ const companyController = {
                 {
                     $match: {
                         'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
-                        paymentStatus: 'Paid' // Chỉ tính các booking đã thanh toán đầy đủ
+                        paymentStatus: 'Paid' 
                     }
                 },
                 {
                     $group: {
                         _id: '$user',
                         totalBookings: { $sum: 1 },
-                        totalRevenue: { $sum: '$totalPrice' } // Tính tổng doanh thu từ mỗi người dùng
+                        totalRevenue: { $sum: '$totalPrice' }
                     }
                 },
                 { $sort: { totalBookings: -1 } },
                 { $limit: 10 }
             ]);
-    
-            // Populate để lấy thông tin chi tiết của từng người dùng
             const populatedTopUsers = await User.populate(topUsers, {
                 path: '_id',
                 select: 'fullName email phoneNumber'
