@@ -19,8 +19,12 @@ router.get('/drivers', authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,
 router.get('/completed-trips-by-month', authMiddleware.verifyToken,authMiddleware.checkCompanyAccess, companyController.getCompletedTripsByMonth);
 router.get('/revenue-by-payment-method', authMiddleware.verifyToken,authMiddleware.checkCompanyAccess ,companyController.getRevenueByPaymentMethod);
 router.get('/revenue-by-time', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.getRevenueByTimeRange);
-router.get('/export-revenue', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.exportRevenueToExcel);
 
+
+// tôi chưa gọi 3 hàm này
+router.get('/export-revenue', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.exportRevenueToExcel);
+router.get('/top-booking-users', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.getTopBookingUsers);
+router.get('/top-booking-users-by-timeframe', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.getTopBookingUsersByTimeFrame);
 router.post('/calculate-salary', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.calculateAndRecordDriverSalary);
 
 

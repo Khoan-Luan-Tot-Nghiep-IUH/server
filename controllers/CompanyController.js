@@ -728,6 +728,145 @@ const companyController = {
             res.status(500).json({ success: false, message: 'Lỗi khi xuất dữ liệu doanh thu ra Excel.', error: error.message });
         }
     },
+    getTopBookingUsers: async (req, res) => {
+        try {
+            const companyId = req.user.companyId;
+    
+            if (!companyId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Yêu cầu phải có mã công ty hợp lệ.',
+                });
+            }
+    
+            // Thực hiện tổng hợp bookings để tìm người dùng đặt nhiều chuyến nhất và tổng doanh thu
+            const topUsers = await Booking.aggregate([
+                {
+                    $lookup: {
+                        from: 'trips',
+                        localField: 'trip',
+                        foreignField: '_id',
+                        as: 'tripDetails'
+                    }
+                },
+                { $unwind: '$tripDetails' },
+                {
+                    $match: {
+                        'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
+                        paymentStatus: 'Paid' // Chỉ tính các booking đã thanh toán đầy đủ
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$user',
+                        totalBookings: { $sum: 1 },
+                        totalRevenue: { $sum: '$totalPrice' } // Tính tổng doanh thu từ mỗi người dùng
+                    }
+                },
+                { $sort: { totalBookings: -1 } },
+                { $limit: 10 }
+            ]);
+    
+            // Populate để lấy thông tin chi tiết của từng người dùng
+            const populatedTopUsers = await User.populate(topUsers, {
+                path: '_id',
+                select: 'fullName email phoneNumber'
+            });
+    
+            return res.status(200).json({
+                success: true,
+                message: 'Top 10 người đặt vé nhiều nhất cho công ty đã được lấy thành công.',
+                data: populatedTopUsers
+            });
+        } catch (error) {
+            console.error('Lỗi khi lấy top người đặt vé:', error);
+            return res.status(500).json({ success: false, message: 'Lỗi khi lấy top người đặt vé.', error: error.message });
+        }
+    },
+    getTopBookingUsersByTimeFrame: async (req, res) => {
+        try {
+            const companyId = req.user.companyId;
+    
+            if (!companyId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Yêu cầu phải có mã công ty hợp lệ.',
+                });
+            }
+    
+            const { year, timeFrame } = req.query;
+            const selectedYear = year || new Date().getFullYear();
+            
+            // Định dạng nhóm theo thời gian dựa trên `timeFrame`
+            const groupFormat = timeFrame === 'year' ? { year: { $year: "$bookingDate" } } :
+                                timeFrame === 'month' ? { year: { $year: "$bookingDate" }, month: { $month: "$bookingDate" } } :
+                                null;
+    
+            if (!groupFormat) {
+                return res.status(400).json({ success: false, message: 'timeFrame không hợp lệ. Chọn "month" hoặc "year".' });
+            }
+    
+            const matchConditions = {
+                'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
+                paymentStatus: 'Paid',
+                bookingDate: {
+                    $gte: new Date(`${selectedYear}-01-01`),
+                    $lt: new Date(`${selectedYear + 1}-01-01`)
+                }
+            };
+    
+            const topUsers = await Booking.aggregate([
+                {
+                    $lookup: {
+                        from: 'trips',
+                        localField: 'trip',
+                        foreignField: '_id',
+                        as: 'tripDetails'
+                    }
+                },
+                { $unwind: '$tripDetails' },
+                { $match: matchConditions },
+                {
+                    $group: {
+                        _id: { ...groupFormat, user: "$user" },
+                        totalBookings: { $sum: 1 },
+                        totalRevenue: { $sum: "$totalPrice" }
+                    }
+                },
+                { $sort: { "_id.year": 1, "_id.month": 1, totalBookings: -1 } }, // Sắp xếp theo thời gian và số vé đặt
+                {
+                    $group: {
+                        _id: timeFrame === 'year' ? "$_id.year" : { year: "$_id.year", month: "$_id.month" },
+                        topUsers: { $push: { user: "$_id.user", totalBookings: "$totalBookings", totalRevenue: "$totalRevenue" } }
+                    }
+                },
+                { $project: { topUsers: { $slice: ["$topUsers", 10] } } } // Lấy top 10 người dùng cho mỗi nhóm thời gian
+            ]);
+    
+            const populatedTopUsers = await Promise.all(
+                topUsers.map(async (timeData) => {
+                    const users = await User.populate(timeData.topUsers, {
+                        path: "user",
+                        select: "fullName email phoneNumber"
+                    });
+                    return { time: timeData._id, topUsers: users };
+                })
+            );
+    
+            const message = timeFrame === 'year'
+                ? `Top 10 người đặt vé nhiều nhất theo từng năm đã được lấy thành công.`
+                : `Top 10 người đặt vé nhiều nhất theo từng tháng của năm ${selectedYear} đã được lấy thành công.`;
+    
+            return res.status(200).json({
+                success: true,
+                message,
+                data: populatedTopUsers
+            });
+        } catch (error) {
+            console.error('Lỗi khi lấy top người đặt vé theo thời gian:', error);
+            return res.status(500).json({ success: false, message: 'Lỗi khi lấy top người đặt vé theo thời gian.', error: error.message });
+        }
+    },  
 };
 
 module.exports = companyController;
