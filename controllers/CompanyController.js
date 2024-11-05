@@ -432,18 +432,59 @@ const companyController = {
           return res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách tài xế.', error: error.message });
         }
      },
-     //đã thành công api này nhưng chưa gọi lên giao diện
-    calculateAndRecordDriverSalary : async (req, res) => {
+    toggleDriverStatus : async (req, res) => {
         try {
-            const { driverId, startDate, endDate } = req.body;
+            const { userId } = req.params; 
+            const companyId = req.user.companyId; 
     
-            // Tìm tài xế và lấy danh sách các chuyến đi đã hoàn thành trong `completedTrips`
-            const driver = await Driver.findById(driverId).populate('completedTrips');
+            
+            const user = await User.findById(userId);
+            if (!user || user.roleId !== 'driver' || !user.companyId.equals(companyId)) {
+                return res.status(404).json({ success: false, message: 'Người dùng không tồn tại hoặc không phải là tài xế của công ty này.' });
+            }
+            const driver = await Driver.findOne({ userId: user._id });
+            if (!driver) {
+                return res.status(404).json({ success: false, message: 'Tài xế không tồn tại trong bảng Driver.' });
+            }
+            const newStatus = !user.isActive;
+            user.isActive = newStatus;
+            driver.isActive = newStatus;
+
+            await user.save();
+            await driver.save();
+    
+            const statusMessage = newStatus ? 'đã được kích hoạt' : 'đã bị vô hiệu hóa';
+            return res.status(200).json({
+                success: true,
+                message: `Tài xế ${statusMessage}.`,
+                isActive: newStatus,
+            });
+        } catch (error) {
+            console.error('Error toggling driver status:', error);
+            return res.status(500).json({ success: false, message: 'Lỗi khi thay đổi trạng thái tài xế.', error: error.message });
+        }
+    },           
+    calculateAndRecordDriverSalary: async (req, res) => {
+        try {
+            const { userId, startDate, endDate } = req.body;
+    
+            // Tìm người dùng với userId được cung cấp
+            const user = await User.findById(userId);
+            if (!user) {
+                return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng.' });
+            }
+    
+            // Kiểm tra xem người dùng có phải là tài xế không
+            if (user.roleId !== 'driver') {
+                return res.status(400).json({ success: false, message: 'Người dùng này không phải là tài xế.' });
+            }
+    
+            // Tìm tài xế dựa trên userId
+            const driver = await Driver.findOne({ userId: user._id }).populate('completedTrips');
             if (!driver) {
                 return res.status(404).json({ success: false, message: 'Không tìm thấy tài xế.' });
             }
     
-            // Kiểm tra nếu `salaryRate` và `baseSalary` có giá trị hợp lệ
             if (typeof driver.salaryRate !== 'number' || isNaN(driver.salaryRate)) {
                 return res.status(400).json({ success: false, message: 'Lương mỗi chuyến đi không hợp lệ.' });
             }
@@ -451,15 +492,13 @@ const companyController = {
                 return res.status(400).json({ success: false, message: 'Lương cơ bản không hợp lệ.' });
             }
     
-            // Lọc các chuyến đi hoàn thành trong khoảng thời gian kỳ lương
             const tripsInPeriod = driver.completedTrips.filter(trip => {
                 return trip.departureTime >= new Date(startDate) && trip.departureTime <= new Date(endDate);
             });
-    
-            const tripEarnings = tripsInPeriod.length * driver.salaryRate; // Thu nhập từ số chuyến đi
+            
+            const tripEarnings = tripsInPeriod.length * driver.salaryRate; 
             const totalSalary = driver.baseSalary + tripEarnings;
     
-            // Tạo một bản ghi lương trong bảng `SalaryRecord`
             const salaryRecord = new SalaryRecord({
                 driverId: driver._id,
                 startDate,
@@ -470,9 +509,8 @@ const companyController = {
             });
             await salaryRecord.save();
     
-            // Xóa các chuyến đi đã được tính lương khỏi `completedTrips` để tránh tính lại
             const tripIdsToRemove = tripsInPeriod.map(trip => trip._id);
-            await Driver.findByIdAndUpdate(driverId, {
+            await Driver.findByIdAndUpdate(driver._id, {
                 $pull: { completedTrips: { $in: tripIdsToRemove } }
             });
     
@@ -485,7 +523,7 @@ const companyController = {
             console.error('Error calculating salary:', error);
             return res.status(500).json({ success: false, message: 'Lỗi khi tính lương cho tài xế.', error: error.message });
         }
-    },
+    },    
     getCompletedTripsByMonth: async (req, res) => {
         try {
             const companyId = req.user.companyId; 
@@ -728,6 +766,141 @@ const companyController = {
             res.status(500).json({ success: false, message: 'Lỗi khi xuất dữ liệu doanh thu ra Excel.', error: error.message });
         }
     },
+    getTopBookingUsers: async (req, res) => {
+        try {
+            const companyId = req.user.companyId;
+    
+            if (!companyId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Yêu cầu phải có mã công ty hợp lệ.',
+                });
+            }
+            const topUsers = await Booking.aggregate([
+                {
+                    $lookup: {
+                        from: 'trips',
+                        localField: 'trip',
+                        foreignField: '_id',
+                        as: 'tripDetails'
+                    }
+                },
+                { $unwind: '$tripDetails' },
+                {
+                    $match: {
+                        'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
+                        paymentStatus: 'Paid' 
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$user',
+                        totalBookings: { $sum: 1 },
+                        totalRevenue: { $sum: '$totalPrice' }
+                    }
+                },
+                { $sort: { totalBookings: -1 } },
+                { $limit: 10 }
+            ]);
+            const populatedTopUsers = await User.populate(topUsers, {
+                path: '_id',
+                select: 'fullName email phoneNumber'
+            });
+    
+            return res.status(200).json({
+                success: true,
+                message: 'Top 10 người đặt vé nhiều nhất cho công ty đã được lấy thành công.',
+                data: populatedTopUsers
+            });
+        } catch (error) {
+            console.error('Lỗi khi lấy top người đặt vé:', error);
+            return res.status(500).json({ success: false, message: 'Lỗi khi lấy top người đặt vé.', error: error.message });
+        }
+    },
+    getTopBookingUsersByTimeFrame: async (req, res) => {
+        try {
+            const companyId = req.user.companyId;
+    
+            if (!companyId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Yêu cầu phải có mã công ty hợp lệ.',
+                });
+            }
+    
+            const { year, timeFrame } = req.query;
+            const selectedYear = year || new Date().getFullYear();
+            
+            // Định dạng nhóm theo thời gian dựa trên `timeFrame`
+            const groupFormat = timeFrame === 'year' ? { year: { $year: "$bookingDate" } } :
+                                timeFrame === 'month' ? { year: { $year: "$bookingDate" }, month: { $month: "$bookingDate" } } :
+                                null;
+    
+            if (!groupFormat) {
+                return res.status(400).json({ success: false, message: 'timeFrame không hợp lệ. Chọn "month" hoặc "year".' });
+            }
+    
+            const matchConditions = {
+                'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
+                paymentStatus: 'Paid',
+                bookingDate: {
+                    $gte: new Date(`${selectedYear}-01-01`),
+                    $lt: new Date(`${selectedYear + 1}-01-01`)
+                }
+            };
+    
+            const topUsers = await Booking.aggregate([
+                {
+                    $lookup: {
+                        from: 'trips',
+                        localField: 'trip',
+                        foreignField: '_id',
+                        as: 'tripDetails'
+                    }
+                },
+                { $unwind: '$tripDetails' },
+                { $match: matchConditions },
+                {
+                    $group: {
+                        _id: { ...groupFormat, user: "$user" },
+                        totalBookings: { $sum: 1 },
+                        totalRevenue: { $sum: "$totalPrice" }
+                    }
+                },
+                { $sort: { "_id.year": 1, "_id.month": 1, totalBookings: -1 } }, // Sắp xếp theo thời gian và số vé đặt
+                {
+                    $group: {
+                        _id: timeFrame === 'year' ? "$_id.year" : { year: "$_id.year", month: "$_id.month" },
+                        topUsers: { $push: { user: "$_id.user", totalBookings: "$totalBookings", totalRevenue: "$totalRevenue" } }
+                    }
+                },
+                { $project: { topUsers: { $slice: ["$topUsers", 10] } } } // Lấy top 10 người dùng cho mỗi nhóm thời gian
+            ]);
+    
+            const populatedTopUsers = await Promise.all(
+                topUsers.map(async (timeData) => {
+                    const users = await User.populate(timeData.topUsers, {
+                        path: "user",
+                        select: "fullName email phoneNumber"
+                    });
+                    return { time: timeData._id, topUsers: users };
+                })
+            );
+    
+            const message = timeFrame === 'year'
+                ? `Top 10 người đặt vé nhiều nhất theo từng năm đã được lấy thành công.`
+                : `Top 10 người đặt vé nhiều nhất theo từng tháng của năm ${selectedYear} đã được lấy thành công.`;
+    
+            return res.status(200).json({
+                success: true,
+                message,
+                data: populatedTopUsers
+            });
+        } catch (error) {
+            console.error('Lỗi khi lấy top người đặt vé theo thời gian:', error);
+            return res.status(500).json({ success: false, message: 'Lỗi khi lấy top người đặt vé theo thời gian.', error: error.message });
+        }
+    },  
 };
 
 module.exports = companyController;

@@ -412,7 +412,7 @@ exports.searchTrips = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Không tìm thấy địa điểm' });
         }
 
-        let filter = {};
+        let filter = { status: { $ne: "Completed" } }; 
         if (departureLoc) {
             filter.departureLocation = departureLoc._id;
         }
@@ -424,7 +424,6 @@ exports.searchTrips = async (req, res) => {
         }
 
         if (departureDate) {
-            // Sử dụng ngày UTC trực tiếp, không chuyển đổi múi giờ
             const startOfDay = moment.utc(departureDate).startOf('day').toDate();
             const endOfDay = moment.utc(departureDate).endOf('day').toDate();
     
@@ -509,12 +508,11 @@ exports.searchTrips = async (req, res) => {
                 departureTime: {
                     $gte: startOfReturnDay,
                     $lte: endOfReturnDay
-                }
+                },
+                status: { $ne: "Completed" },
             })
             .populate('departureLocation arrivalLocation busType')
             .exec();
-
-            // Đếm số ghế trống cho chuyến về
             const returnTripSeatCounts = await Seat.aggregate([
                 { $match: { trip: { $in: returnTripIds }, isAvailable: true } },
                 { $group: { _id: "$trip", availableSeats: { $sum: 1 } } }
