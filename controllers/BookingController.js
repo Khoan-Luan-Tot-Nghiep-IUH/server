@@ -13,174 +13,211 @@ const payOS = new PayOS(
 );
 const crypto = require('crypto');
 
+
+exports.getBookingDrafts = async (req, res) => {
+    try {
+        const userId = req.user._id;
+
+        const draftBookings = await Booking.find({
+            user: userId,
+            status: 'Draft',
+            expiryTime: { $gt: new Date() } 
+        })
+        .populate({
+            path: 'trip',
+            populate: [
+                { path: 'departureLocation', select: 'name address' },
+                { path: 'arrivalLocation', select: 'name address' },
+                { path: 'busType', select: 'type capacity features' },
+                { path: 'companyId', select: 'name contactInfo' } 
+            ]
+        })
+        .select('trip seatNumbers totalPrice expiryTime');
+
+        res.status(200).json({
+            success: true,
+            data: draftBookings,
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Lỗi khi lấy booking Draft', error: error.message });
+    }
+};
+
+
+
+exports.createBookingDraft = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const { tripId, seatNumbers } = req.body;
+        const userId = req.user._id;
+
+        const MAX_SEATS_PER_BOOKING = 4;
+        const uniqueSeatNumbers = [...new Set(seatNumbers)];
+        
+        if (!tripId || !uniqueSeatNumbers.length) {
+            throw new Error('Thiếu thông tin cần thiết');
+        }
+
+        if (uniqueSeatNumbers.length > MAX_SEATS_PER_BOOKING) {
+            throw new Error(`Chỉ được đặt tối đa ${MAX_SEATS_PER_BOOKING} ghế trong một lần đặt`);
+        }
+
+        const currentTime = new Date();
+        const seats = await Seat.find({
+            trip: tripId,
+            seatNumber: { $in: uniqueSeatNumbers },
+            isLocked: true,
+            lockedBy: userId,
+            lockExpiration: { $gt: currentTime }
+        }).session(session);
+
+        if (seats.length !== uniqueSeatNumbers.length) {
+            throw new Error('Một số ghế đã được đặt hoặc đang được giữ chỗ');
+        }
+
+        // Tính tổng giá
+        const totalPrice = seats.reduce((acc, seat) => acc + seat.price, 0);
+
+        const expiryTime = new Date(currentTime.getTime() + 10 * 60000);
+        const bookingDraft = new Booking({
+            user: userId,
+            trip: tripId,
+            seatNumbers: uniqueSeatNumbers,
+            totalPrice,
+            status: 'Draft',
+            expiryTime
+        });
+
+        await bookingDraft.save({ session });
+        await session.commitTransaction();
+
+        res.status(201).json({ 
+            success: true, 
+            data: {
+                bookingId: bookingDraft._id,
+                expiryTime,
+                totalPrice
+            }
+        });
+
+    } catch (error) {
+        await session.abortTransaction();
+        res.status(400).json({ success: false, message: error.message });
+    } finally {
+        session.endSession();
+    }
+};
+
 function generateOrderCode(bookingId) {
     const idString = bookingId.toString();
     const hash = crypto.createHash('sha256').update(idString + Date.now()).digest('hex'); 
     const orderCode = parseInt(hash.slice(0, 8), 16); // Giới hạn mã orderCode
     return Math.abs(orderCode);
 }
+
 exports.createBooking = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        const { tripId, seatNumbers, includeReturnTrip, returnSeatNumbers, paymentMethod } = req.body;
+        const { bookingId, paymentMethod } = req.body; 
         const userId = req.user._id;
 
-        const MAX_SEATS_PER_BOOKING = 4;
-
-        const uniqueSeatNumbers = [...new Set(seatNumbers)];
-        const userBookings = await Booking.find({
+        const bookingDraft = await Booking.findOne({
+            _id: bookingId,
             user: userId,
-            trip: tripId,
+            status: 'Draft',
+            expiryTime: { $gt: new Date() }
         }).session(session);
-        
-        const totalSeatsBooked = userBookings.reduce((acc, booking) => acc + booking.seatNumbers.length, 0);
-        if (totalSeatsBooked + uniqueSeatNumbers.length > MAX_SEATS_PER_BOOKING) {
-            throw new Error(`Bạn chỉ được đặt tối đa ${MAX_SEATS_PER_BOOKING} ghế cho mỗi chuyến đi`);
-        }
-        if (uniqueSeatNumbers.length > MAX_SEATS_PER_BOOKING) {
-            throw new Error(`Chỉ được đặt tối đa ${MAX_SEATS_PER_BOOKING} ghế trong một lần đặt`);
-        }
-        if (!tripId) throw new Error('Mã chuyến đi là bắt buộc');
-        if (!uniqueSeatNumbers || uniqueSeatNumbers.length === 0) throw new Error('Phải chọn số ghế trước khi đặt vé');
 
-        const trip = await Trip.findById(tripId).session(session).lean();
-        if (!trip) throw new Error('Chuyến đi không tồn tại');
-        
-        if (trip.status !== 'Scheduled') {
-            throw new Error('Chuyến đi hiện tại không còn khả dụng để đặt vé');
+        if (!bookingDraft) {
+            throw new Error('Đặt vé đã hết hạn hoặc không tồn tại');
         }
-        let totalPrice = 0;
 
         const seats = await Seat.find({
-            trip: tripId,
-            seatNumber: { $in: uniqueSeatNumbers },
-        }).session(session).lean();
-
-        const unavailableSeats = seats.filter(seat => {
-            return (
-                seat.isAvailable === false && 
-                (seat.bookedBy.toString() !== userId.toString() || 
-                 seat.paymentMethod !== paymentMethod)
-            );
-        });
-        if (unavailableSeats.length > 0) {
-            const unavailableSeatNumbers = unavailableSeats.map(seat => seat.seatNumber);
-            throw new Error(`Các ghế sau đã được đặt trước: ${unavailableSeatNumbers.join(', ')}`);
-        }
-
-        totalPrice = seats.reduce((acc, seat) => acc + seat.price, 0);
-        let existingBooking = await Booking.findOne({
-            user: userId,
-            trip: tripId,
-            paymentMethod: paymentMethod,
-            paymentStatus: 'Unpaid'
+            trip: bookingDraft.trip,
+            seatNumber: { $in: bookingDraft.seatNumbers },
+            isLocked: true,
+            lockedBy: userId,
+            lockExpiration: { $gt: new Date() }
         }).session(session);
 
-        let booking;
-        if (existingBooking) {
-            existingBooking.seatNumbers = [...new Set([...existingBooking.seatNumbers, ...uniqueSeatNumbers])];
-            existingBooking.totalPrice += totalPrice;
-            booking = existingBooking;
-        } else {
-            booking = new Booking({
-                user: userId,
-                trip: tripId,
-                seatNumbers: uniqueSeatNumbers,
-                totalPrice,
-                status: paymentMethod === 'Online' ? 'Pending' : 'Confirmed',
-                paymentMethod,
-                paymentStatus: 'Unpaid',
-            });
+        if (seats.length !== bookingDraft.seatNumbers.length) {
+            throw new Error('Một số ghế đã không còn khả dụng');
         }
-        const orderCode = generateOrderCode(booking._id);
-        booking.orderCode = orderCode;
-        await booking.save({ session });
+
+        bookingDraft.paymentMethod = paymentMethod;
+        bookingDraft.status = paymentMethod === 'Online' ? 'Pending' : 'Confirmed';
+        
+        // Chỉ tạo orderCode khi trạng thái không phải là 'Draft'
+        if (!bookingDraft.orderCode) {
+            bookingDraft.orderCode = generateOrderCode(bookingDraft._id);
+        }
+
+        await bookingDraft.save({ session });
         await Seat.updateMany(
-            { trip: tripId, seatNumber: { $in: uniqueSeatNumbers } },
-            { $set: { isAvailable: false, bookedBy: userId, paymentMethod: paymentMethod } },
+            { 
+                trip: bookingDraft.trip,
+                seatNumber: { $in: bookingDraft.seatNumbers },
+                lockedBy: userId
+            },
+            { 
+                $set: { 
+                    isLocked: false,
+                    lockedBy: null,
+                    lockExpiration: null,
+                    isAvailable: false,
+                    bookedBy: userId
+                },
+                $inc: { version: 1 }
+            },
             { session }
         );
-        if (includeReturnTrip && trip.isRoundTrip && trip.returnTripId) {
-            const returnTripId = trip.returnTripId;
-            const returnTrip = await Trip.findById(returnTripId).session(session).lean();
-            if (!returnTrip) throw new Error('Chuyến đi khứ hồi không tồn tại');
 
-            const finalReturnSeatNumbers = returnSeatNumbers && returnSeatNumbers.length > 0 ? returnSeatNumbers : uniqueSeatNumbers;
-            const returnSeats = await Seat.find({
-                trip: returnTripId,
-                seatNumber: { $in: finalReturnSeatNumbers },
-                isAvailable: true
-            }).session(session).lean();
-
-            if (returnSeats.length !== finalReturnSeatNumbers.length) {
-                throw new Error('Một hoặc nhiều ghế khứ hồi không còn trống');
-            }
-
-            const returnPrice = returnSeats.reduce((acc, seat) => acc + seat.price, 0);
-            await Seat.updateMany(
-                { _id: { $in: returnSeats.map(seat => seat._id) } },
-                { $set: { isAvailable: false, bookedBy: userId } },
-                { session }
-            );
-
-            const returnBooking = new Booking({
-                user: userId,
-                trip: returnTripId,
-                seatNumbers: finalReturnSeatNumbers,
-                totalPrice: returnPrice,
-                status: 'Confirmed'
-            });
-
-            await returnBooking.save({ session });
-        }
         if (paymentMethod === 'Online') {
-            const body = {
-                orderCode,
-                amount: booking.totalPrice,
-                description: `Thanh toán cho vé ${tripId.slice(17, 24)}`,
-                items: uniqueSeatNumbers.map(seat => {
-                    const seatInfo = seats.find(s => s.seatNumber === seat);
-                    if (!seatInfo) {
-                        throw new Error(`Ghế số ${seat} không tồn tại trong cơ sở dữ liệu`);
-                    }
-                    return { name: `Ghế số ${seat}`, quantity: 1, price: seatInfo.price };
-                }),
+            const paymentLinkResponse = await payOS.createPaymentLink({
+                orderCode: bookingDraft.orderCode,
+                amount: bookingDraft.totalPrice,
+                description: `Thanh toán cho vé ${bookingDraft.trip.toString().slice(17, 24)}`,
+                items: bookingDraft.seatNumbers.map(seatNumber => ({
+                    name: `Ghế số ${seatNumber}`,
+                    quantity: 1,
+                    price: seats.find(s => s.seatNumber === seatNumber)?.price || 0
+                })),
                 returnUrl: `http://localhost:5000/api/payment-success`,
                 cancelUrl: `http://localhost:5000/api/payment-cancel`,
-            };
+            });
 
-            const paymentLinkResponse = await payOS.createPaymentLink(body);
-            const paymentData = paymentLinkResponse.hasOwnProperty('data') ? paymentLinkResponse.data : paymentLinkResponse;
-
-            if (paymentData && paymentData.checkoutUrl) {
+            if (paymentLinkResponse.checkoutUrl) {
                 await session.commitTransaction();
-                session.endSession();
-
                 return res.status(200).json({
                     success: true,
                     data: {
-                        bookingId: booking._id,
-                        paymentLink: paymentData.checkoutUrl,
-                        qrCode: paymentData.qrCode,
+                        bookingId: bookingDraft._id,
+                        paymentLink: paymentLinkResponse.checkoutUrl,
+                        qrCode: paymentLinkResponse.qrCode,
                     }
                 });
             } else {
-                throw new Error('Lỗi tạo link thanh toán PayOS');
+                throw new Error('Lỗi tạo link thanh toán PayOS hoặc không có checkoutUrl trong phản hồi.');
             }
         }
-
+        
         await session.commitTransaction();
-        session.endSession();
+        res.status(200).json({ success: true, data: bookingDraft });
 
-        res.status(201).json({ success: true, data: booking });
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
         res.status(400).json({ success: false, message: error.message });
+    } finally {
+        session.endSession();
     }
 };
+
 
 exports.paymentSuccess = async (req, res) => {
     

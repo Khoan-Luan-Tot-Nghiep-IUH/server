@@ -6,6 +6,8 @@ module.exports = (io) => {
     const router = express.Router();
 
     const socketIoMiddleware = require('../middleware/socketIoMiddleware')(io);
+    router.get('/booking-drafts', authMiddleware.verifyToken, socketIoMiddleware, bookingController.getBookingDrafts);
+    router.post('/bookings-confirm', authMiddleware.verifyToken, socketIoMiddleware, bookingController.createBookingDraft);
     router.post('/bookings', authMiddleware.verifyToken, socketIoMiddleware, bookingController.createBooking);
     router.get('/payment-success', bookingController.paymentSuccess);
     router.get('/payment-cancel', bookingController.paymentCancel);

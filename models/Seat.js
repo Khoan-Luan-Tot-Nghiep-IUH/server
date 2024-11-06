@@ -44,7 +44,7 @@ const SeatSchema = new mongoose.Schema({
     lockedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        default: null // Người giữ ghế tạm thời (dùng cho realtime)
+        default: null
     },
     version: { type: Number, default: 0 },
     lockExpiration: Date
