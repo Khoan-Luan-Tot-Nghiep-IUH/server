@@ -7,6 +7,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 const checkCompanyAdmin = [authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess];
 const checkSuperAdminOrCompanyAdmin = [authMiddleware.verifyToken, authMiddleware.isSuperAdminOrStaffOrAdmin, authMiddleware.checkCompanyAccess];
 
+router.get('/bus-types/get-all', busTypeController.getAllBusType);
 // Tạo loại xe buýt mới (Yêu cầu quyền Super Admin hoặc Company Admin)
 router.post('/bus-types', checkCompanyAdmin, busTypeController.createBusType);
 
@@ -18,11 +19,8 @@ router.get('/bus-types/:id', authMiddleware.verifyToken, authMiddleware.checkCom
 
 // Cập nhật thông tin loại xe buýt (Yêu cầu quyền Super Admin hoặc Company Admin)
 router.put('/bus-types/:id', checkSuperAdminOrCompanyAdmin, busTypeController.updateBusType);
-
-// Xóa loại xe buýt (Yêu cầu quyền Super Admin hoặc Company Admin)
 router.delete('/bus-types/:id', checkSuperAdminOrCompanyAdmin, busTypeController.deleteBusType);
-
-// Lấy danh sách tên các loại xe buýt của công ty hiện tại (Yêu cầu xác thực)
 router.get('/bus-types/names', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, busTypeController.getBusTypeNames);
+
 
 module.exports = router;

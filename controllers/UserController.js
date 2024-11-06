@@ -174,9 +174,6 @@ const userRegister = async (req, res) => {
         res.status(500).json({ success: false, msg: 'Đăng ký thất bại', error: error.message });
     }
 };
-
-
-
 const confirmRegistration = async (req, res) => {
     const { verificationMethod, phoneNumber, email, verificationCode } = req.body;
 
@@ -221,8 +218,6 @@ const confirmRegistration = async (req, res) => {
         res.status(500).json({ success: false, msg: 'Xác nhận đăng ký thất bại', error: error.message });
     }
 };
-
-
 const userLogin = async (req, res) => {
     const { userName, password } = req.body;
 

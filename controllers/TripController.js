@@ -12,15 +12,10 @@ const Driver = require('../models/Driver');
 exports.getSeatsByTripId = async (req, res) => {
     try {
         const { tripId } = req.params;
-
-        // Tìm danh sách ghế theo tripId
         const seats = await Seat.find({ trip: tripId });
-
         if (!seats.length) {
             return res.status(404).json({ success: false, message: 'No seats found for this trip' });
         }
-
-        // Phân loại ghế theo tầng
         const lowerSeats = seats.filter(seat => seat.floor === 1);
         const upperSeats = seats.filter(seat => seat.floor === 2);
 
@@ -80,33 +75,48 @@ exports.createTrip = async (req, res) => {
 
         await newTrip.save();
 
-        // Tạo ghế cho chuyến đi chính
-        const seats = [];
-        const totalSeats = busTypeInfo.seats;
-        const floors = busTypeInfo.floorCount || 1; // Sử dụng số tầng từ BusType, mặc định là 1 tầng
-        const rows = ['Front', 'Middle', 'Back']; // Giả định có 3 hàng ghế
+       
+            const seats = [];
+            const totalSeats = busTypeInfo.seats;
+            const floors = busTypeInfo.floorCount || 1; 
+            const rows = ['Front', 'Middle', 'Back']; 
 
-        let seatNumber = 1;
+            let seatNumber = 1;
 
-        for (let floor = 1; floor <= floors; floor++) {
-            for (let row of rows) {
-                const seatsInRow = Math.ceil(totalSeats / (floors * rows.length)); // Chia đều số ghế giữa các hàng và tầng
-                for (let i = 0; i < seatsInRow; i++) {
-                    if (seatNumber > totalSeats) break; // Dừng lại nếu đã tạo đủ ghế
-                    let seatPrice = basePrice;
-                    seats.push({
-                        trip: newTrip._id,
-                        seatNumber: seatNumber++,
-                        isAvailable: true,
-                        price: seatPrice,
-                        seatRow: row,
-                        floor: floor
-                    });
+            for (let floor = 1; floor <= floors; floor++) {
+                for (let row of rows) {
+                    const seatsInRow = Math.ceil(totalSeats / (floors * rows.length));
+                    for (let i = 0; i < seatsInRow; i++) {
+                        if (seatNumber > totalSeats) break; 
+                        
+                        let seatPrice = basePrice;
+                        let isAvailable = true;
+                        let isVIP = false;
+
+                     
+                        if (seatNumber === 1) {
+                            isAvailable = false;
+                        }
+                        
+                    
+                        if ([2,3,4, 5, 6].includes(seatNumber)) {
+                            isVIP = true;
+                        }
+
+                        seats.push({
+                            trip: newTrip._id,
+                            seatNumber: seatNumber++,
+                            isAvailable: isAvailable,
+                            isVIP: isVIP,
+                            price: seatPrice,
+                            seatRow: row,
+                            floor: floor
+                        });
+                    }
                 }
             }
-        }
 
-        await Seat.insertMany(seats);
+            await Seat.insertMany(seats);
 
         // Nếu là chuyến đi khứ hồi, tạo chuyến đi về
         let returnTrip = null;
