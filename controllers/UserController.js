@@ -58,7 +58,6 @@ const redeemPointsForVoucher = async (req, res) => {
     }
 };
 
-
 const sendResetPasswordEmail = async (req, res) => {
     try {
         const { email } = req.body;

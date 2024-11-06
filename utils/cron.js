@@ -20,10 +20,6 @@ if (mongoose.connection.readyState === 0) {
     });
 }
 
-/**
- * Cron Job 1: Hủy Đặt Vé Online Chưa Thanh Toán Sau 10 Phút
- * Chạy mỗi 10 phút
- */
 const cancelExpiredOnlineBookings = cron.schedule('*/10 * * * *', async () => { // Chạy mỗi 10 phút
     console.log('Cron Job: Hủy đặt vé online chưa thanh toán chạy lúc:', new Date());
 
@@ -116,7 +112,68 @@ const updateCompletedTrips = cron.schedule('0 0 * * *', async () => {
     timezone: "Asia/Ho_Chi_Minh", 
 });
 
+
+const cancelUnpaidDraftBookings = cron.schedule('*/10 * * * *', async () => { // Chạy mỗi 10 phút
+    console.log('Cron Job: Hủy booking Draft chưa chọn phương thức thanh toán chạy lúc:', new Date());
+
+    try {
+        const now = new Date();
+        
+        const expiredDraftBookings = await Booking.find({
+            status: 'Draft',
+            expiryTime: { $lt: now }, 
+            createdAt: { $lt: new Date(now.getTime() - 10 * 60000) } 
+        });
+
+        if (expiredDraftBookings.length === 0) {
+            console.log('Không có booking nào cần hủy.');
+            return;
+        }
+
+
+        const draftBookingIds = expiredDraftBookings.map(booking => booking._id);
+
+        const deleteResult = await Booking.deleteMany({ _id: { $in: draftBookingIds } });
+        console.log(`Đã xóa ${deleteResult.deletedCount} booking Draft.`);
+
+        const tripSeatMap = {};
+
+        expiredDraftBookings.forEach(booking => {
+            if (!tripSeatMap[booking.trip]) {
+                tripSeatMap[booking.trip] = [];
+            }
+            tripSeatMap[booking.trip].push(...booking.seatNumbers);
+        });
+        
+        const seatUpdateConditions = Object.keys(tripSeatMap).map(tripId => ({
+            trip: tripId,
+            seatNumber: { $in: tripSeatMap[tripId] },
+        }));
+
+        const bulkOperations = seatUpdateConditions.map(condition => ({
+            updateMany: {
+                filter: condition,
+                update: { $set: { isAvailable: true, bookedBy: null, paymentMethod: null } },
+            }
+        }));
+
+        if (bulkOperations.length > 0) {
+            const bulkResult = await Seat.bulkWrite(bulkOperations);
+            console.log(`Đã giải phóng ${bulkResult.modifiedCount} ghế.`);
+        } else {
+            console.log('Không có ghế nào cần cập nhật.');
+        }
+
+    } catch (error) {
+        console.error('Lỗi trong quá trình chạy Cron Job Hủy Booking Draft:', error);
+    }
+}, {
+    scheduled: true,
+    timezone: "Asia/Ho_Chi_Minh",
+});
+
 module.exports = {
     cancelExpiredOnlineBookings,
     updateCompletedTrips,
+    cancelUnpaidDraftBookings
 };

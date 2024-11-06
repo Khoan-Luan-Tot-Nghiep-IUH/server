@@ -22,29 +22,45 @@ const BookingSchema = new mongoose.Schema({
     orderCode: {
         type: String,
         unique: true,
-        require:true,
+        sparse: true 
     },
     status: {
         type: String,
-        enum: ['Pending', 'Confirmed', 'Cancelled'],
-        default: 'Pending'
+        enum: ['Draft', 'Pending', 'Confirmed', 'Cancelled', 'Expired'],
+        default: 'Draft'
     },
     totalPrice: {
         type: Number,
         required: true
     },
-        paymentMethod: {
+    paymentMethod: {
         type: String,
         enum: ['OnBoard', 'Online'],
-        required: true
     },
     paymentStatus: {
         type: String,
         enum: ['Paid', 'Unpaid'],
         default: 'Unpaid'
     },
+    expiryTime: {
+        type: Date,
+        default: null
+    },
     isCheckedIn: { type: Boolean, default: false },
 });
 
 const Booking = mongoose.model('Booking', BookingSchema);
+
+async function updateIndexes() {
+    try {
+        await Booking.collection.dropIndex("orderCode_1");
+        await Booking.syncIndexes(); 
+        console.log("Indexes updated successfully.");
+    } catch (error) {
+        console.error("Error updating indexes:", error);
+    }
+}
+
+updateIndexes();
+
 module.exports = Booking;
