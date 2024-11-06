@@ -99,7 +99,7 @@ exports.createTrip = async (req, res) => {
                         }
                         
                     
-                        if ([2,3,4, 5, 6].includes(seatNumber)) {
+                        if ([2,3,4,,5,6].includes(seatNumber)) {
                             isVIP = true;
                         }
 
