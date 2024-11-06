@@ -43,8 +43,6 @@ exports.getBookingDrafts = async (req, res) => {
     }
 };
 
-
-
 exports.createBookingDraft = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -55,7 +53,7 @@ exports.createBookingDraft = async (req, res) => {
 
         const MAX_SEATS_PER_BOOKING = 4;
         const uniqueSeatNumbers = [...new Set(seatNumbers)];
-        
+
         if (!tripId || !uniqueSeatNumbers.length) {
             throw new Error('Thiếu thông tin cần thiết');
         }
@@ -65,42 +63,88 @@ exports.createBookingDraft = async (req, res) => {
         }
 
         const currentTime = new Date();
+        const expiryTime = new Date(currentTime.getTime() + 10 * 60000); // 10 minutes expiry
+
+        // Check for existing draft
+        const existingDraft = await Booking.findOne({
+            user: userId,
+            trip: tripId,
+            status: 'Draft',
+            expiryTime: { $gt: currentTime }
+        }).session(session);
+
+        // Retrieve available seats based on tripId and seatNumbers
         const seats = await Seat.find({
             trip: tripId,
             seatNumber: { $in: uniqueSeatNumbers },
-            isLocked: true,
-            lockedBy: userId,
-            lockExpiration: { $gt: currentTime }
+            isAvailable: true,
         }).session(session);
 
+        // Check if the seats returned match the requested seats
         if (seats.length !== uniqueSeatNumbers.length) {
             throw new Error('Một số ghế đã được đặt hoặc đang được giữ chỗ');
         }
 
-        // Tính tổng giá
-        const totalPrice = seats.reduce((acc, seat) => acc + seat.price, 0);
+        // Calculate total price for the new seats
+        const totalPrice = seats.reduce((acc, seat) => acc + (seat.price || 0), 0);
 
-        const expiryTime = new Date(currentTime.getTime() + 10 * 60000);
-        const bookingDraft = new Booking({
-            user: userId,
-            trip: tripId,
-            seatNumbers: uniqueSeatNumbers,
-            totalPrice,
-            status: 'Draft',
-            expiryTime
-        });
+        if (existingDraft) {
+            // If an existing draft is found, update the draft with new seat numbers and total price
+            existingDraft.seatNumbers = [...new Set([...existingDraft.seatNumbers, ...uniqueSeatNumbers])]; // Ensure unique seat numbers
+            existingDraft.totalPrice += totalPrice; // Update total price
+            existingDraft.expiryTime = expiryTime; // Reset expiry time to extend the draft duration
+            
+            // Save the updated draft
+            await existingDraft.save({ session });
 
-        await bookingDraft.save({ session });
-        await session.commitTransaction();
+            // Lock the newly added seats
+            await Seat.updateMany(
+                { _id: { $in: seats.map(seat => seat._id) } },
+                { $set: { isLocked: true, lockedBy: userId, lockExpiration: expiryTime } },
+                { session }
+            );
 
-        res.status(201).json({ 
-            success: true, 
-            data: {
-                bookingId: bookingDraft._id,
-                expiryTime,
-                totalPrice
-            }
-        });
+            await session.commitTransaction();
+
+            res.status(200).json({
+                success: true,
+                data: {
+                    bookingId: existingDraft._id,
+                    expiryTime,
+                    totalPrice: existingDraft.totalPrice
+                }
+            });
+        } else {
+            // If no existing draft, create a new one
+            const bookingDraft = new Booking({
+                user: userId,
+                trip: tripId,
+                seatNumbers: uniqueSeatNumbers,
+                totalPrice,
+                status: 'Draft',
+                expiryTime
+            });
+
+            await bookingDraft.save({ session });
+
+            // Lock seats for the user during the booking draft period
+            await Seat.updateMany(
+                { _id: { $in: seats.map(seat => seat._id) } },
+                { $set: { isLocked: true, lockedBy: userId, lockExpiration: expiryTime } },
+                { session }
+            );
+
+            await session.commitTransaction();
+
+            res.status(201).json({
+                success: true,
+                data: {
+                    bookingId: bookingDraft._id,
+                    expiryTime,
+                    totalPrice
+                }
+            });
+        }
 
     } catch (error) {
         await session.abortTransaction();
@@ -110,10 +154,12 @@ exports.createBookingDraft = async (req, res) => {
     }
 };
 
+
+
 function generateOrderCode(bookingId) {
     const idString = bookingId.toString();
-    const hash = crypto.createHash('sha256').update(idString + Date.now()).digest('hex'); 
-    const orderCode = parseInt(hash.slice(0, 8), 16); // Giới hạn mã orderCode
+    const hash = crypto.createHash('sha256').update(idString + Date.now()).digest('hex');
+    const orderCode = parseInt(hash.slice(0, 8), 16);
     return Math.abs(orderCode);
 }
 
@@ -135,27 +181,21 @@ exports.createBooking = async (req, res) => {
         if (!bookingDraft) {
             throw new Error('Đặt vé đã hết hạn hoặc không tồn tại');
         }
-
         const seats = await Seat.find({
             trip: bookingDraft.trip,
             seatNumber: { $in: bookingDraft.seatNumbers },
             isLocked: true,
             lockedBy: userId,
-            lockExpiration: { $gt: new Date() }
         }).session(session);
 
         if (seats.length !== bookingDraft.seatNumbers.length) {
             throw new Error('Một số ghế đã không còn khả dụng');
         }
-
         bookingDraft.paymentMethod = paymentMethod;
         bookingDraft.status = paymentMethod === 'Online' ? 'Pending' : 'Confirmed';
-        
-        // Chỉ tạo orderCode khi trạng thái không phải là 'Draft'
         if (!bookingDraft.orderCode) {
             bookingDraft.orderCode = generateOrderCode(bookingDraft._id);
         }
-
         await bookingDraft.save({ session });
         await Seat.updateMany(
             { 
@@ -175,20 +215,24 @@ exports.createBooking = async (req, res) => {
             },
             { session }
         );
-
         if (paymentMethod === 'Online') {
-            const paymentLinkResponse = await payOS.createPaymentLink({
-                orderCode: bookingDraft.orderCode,
+            const paymentItems = bookingDraft.seatNumbers.map(seatNumber => {
+                const seatInfo = seats.find(s => s.seatNumber === seatNumber);
+                if (!seatInfo) {
+                    throw new Error(`Ghế số ${seatNumber} không tồn tại hoặc không có giá.`);
+                }
+                return { name: `Ghế số ${seatNumber}`, quantity: 1, price: seatInfo.price };
+            });
+
+            const paymentLinkRequest = {
+                orderCode: Number(bookingDraft.orderCode),
                 amount: bookingDraft.totalPrice,
                 description: `Thanh toán cho vé ${bookingDraft.trip.toString().slice(17, 24)}`,
-                items: bookingDraft.seatNumbers.map(seatNumber => ({
-                    name: `Ghế số ${seatNumber}`,
-                    quantity: 1,
-                    price: seats.find(s => s.seatNumber === seatNumber)?.price || 0
-                })),
+                items: paymentItems,
                 returnUrl: `http://localhost:5000/api/payment-success`,
                 cancelUrl: `http://localhost:5000/api/payment-cancel`,
-            });
+            };
+            const paymentLinkResponse = await payOS.createPaymentLink(paymentLinkRequest);
 
             if (paymentLinkResponse.checkoutUrl) {
                 await session.commitTransaction();
@@ -205,6 +249,7 @@ exports.createBooking = async (req, res) => {
             }
         }
         
+        // If payment method is not 'Online', complete the booking
         await session.commitTransaction();
         res.status(200).json({ success: true, data: bookingDraft });
 
@@ -217,7 +262,6 @@ exports.createBooking = async (req, res) => {
         session.endSession();
     }
 };
-
 
 exports.paymentSuccess = async (req, res) => {
     

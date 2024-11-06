@@ -2,7 +2,7 @@ const User = require('../models/User');
 const argon2 = require('argon2');
 const {generateAccessToken } = require('../middleware/authMiddleware');
 const crypto = require('crypto');
-const { sendOrderConfirmationEmail } = require('../config/mailer');
+const { sendOrderConfirmationEmail, sendVerificationEmail, verifyCodeEmail } = require('../config/mailer');
 const moment = require('moment-timezone');
 const { validationResult } = require('express-validator');
 const {sendVerificationCode, verifyCode } = require('../config/twilioConfig');
@@ -119,31 +119,43 @@ const userRegister = async (req, res) => {
     }
 
     try {
-        const { email, userName, password, roleId, fullName, phoneNumber, address, birthDay}= req.body;
-
+        const { email, userName, password, roleId, fullName, phoneNumber, address, birthDay, verificationMethod } = req.body;
+        console.log('Bắt đầu xử lý yêu cầu đăng ký với dữ liệu:', req.body);
         if (roleId === 'admin' || roleId === 'superadmin') {
             return res.status(403).json({ success: false, msg: 'Bạn không thể tự đăng ký với vai trò này' });
         }
 
+        // Kiểm tra tồn tại của người dùng
         const existingUserByEmail = await TempUser.findOne({ email });
         if (existingUserByEmail) {
             return res.status(400).json({ success: false, msg: 'Email đã được sử dụng' });
         }
 
-
         const existingUserByUserName = await TempUser.findOne({ userName });
         if (existingUserByUserName) {
             return res.status(400).json({ success: false, msg: 'Tên người dùng đã được sử dụng' });
         }
+        
         const existingUserByPhoneNumber = await TempUser.findOne({ phoneNumber });
         if (existingUserByPhoneNumber) {
             return res.status(400).json({ success: false, msg: 'Số điện thoại đã được sử dụng' });
         }
-        const status = await sendVerificationCode(phoneNumber);
+
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+        let status;
+        if (verificationMethod === 'phone') {
+            status = await sendVerificationCode(phoneNumber, verificationCode);
+        } else if (verificationMethod === 'email') {
+            status = await sendVerificationEmail(email, verificationCode);
+        } else {
+            return res.status(400).json({ success: false, msg: 'Phương thức xác nhận không hợp lệ' });
+        }
 
         if (status !== 'pending') {
             return res.status(500).json({ success: false, msg: 'Gửi mã xác nhận thất bại' });
         }
+
         const tempUser = new TempUser({
             userName,
             fullName,
@@ -153,27 +165,42 @@ const userRegister = async (req, res) => {
             address,
             birthDay
         });
+        console.log('Đang lưu người dùng tạm:', tempUser);
         await tempUser.save();
         res.status(201).json({ success: true, msg: 'Mã xác nhận đã được gửi. Vui lòng nhập mã để hoàn tất đăng ký.' });
 
     } catch (error) {
+        console.error('Có lỗi xảy ra:', error); // In ra chi tiết lỗi
         res.status(500).json({ success: false, msg: 'Đăng ký thất bại', error: error.message });
     }
 };
 
+
+
 const confirmRegistration = async (req, res) => {
-    const { phoneNumber, verificationCode } = req.body;
+    const { verificationMethod, phoneNumber, email, verificationCode } = req.body;
 
     try {
-        const status = await verifyCode(phoneNumber, verificationCode);
+        let status;
+        if (verificationMethod === 'phone') {
+            status = await verifyCode(phoneNumber, verificationCode);
+        } else if (verificationMethod === 'email') {
+            status = await verifyCodeEmail(email, verificationCode);
+        } else {
+            return res.status(400).json({ success: false, msg: 'Phương thức xác nhận không hợp lệ' });
+        }
+
         if (status !== 'approved') {
             return res.status(400).json({ success: false, msg: 'Mã xác nhận không chính xác hoặc đã hết hạn' });
         }
-        const tempUser = await TempUser.findOne({ phoneNumber });
+
+        // Kiểm tra người dùng tạm theo email
+        const tempUser = await TempUser.findOne({ email });
         if (!tempUser) {
-            return res.status(400).json({ success: false, msg: 'Số điện thoại không tồn tại' });
+            return res.status(400).json({ success: false, msg: 'Email không tồn tại' });
         }
 
+        // Tiến hành lưu người dùng chính thức
         const newUser = new User({
             userName: tempUser.userName,
             fullName: tempUser.fullName,
@@ -186,13 +213,15 @@ const confirmRegistration = async (req, res) => {
         });
 
         await newUser.save();
-        await TempUser.deleteOne({ phoneNumber });
+        await TempUser.deleteOne({ email }); // Xóa người dùng tạm
 
-        res.status(201).json({ success: true, msg: 'Đăng ký thành công' ,newUser });
+        res.status(201).json({ success: true, msg: 'Đăng ký thành công', newUser });
     } catch (error) {
+        console.error('Xác nhận đăng ký thất bại:', error);
         res.status(500).json({ success: false, msg: 'Xác nhận đăng ký thất bại', error: error.message });
     }
 };
+
 
 const userLogin = async (req, res) => {
     const { userName, password } = req.body;

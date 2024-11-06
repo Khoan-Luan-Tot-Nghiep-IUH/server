@@ -55,7 +55,6 @@ async function updateIndexes() {
     try {
         await Booking.collection.dropIndex("orderCode_1");
         await Booking.syncIndexes(); 
-        console.log("Indexes updated successfully.");
     } catch (error) {
         console.error("Error updating indexes:", error);
     }
