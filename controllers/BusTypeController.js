@@ -1,17 +1,14 @@
 const BusType = require('../models/BusType');
-const Trip = require('../models/Trip'); // Import thêm model Trip nếu cần kiểm tra liên kết
+const Trip = require('../models/Trip');
 
-// Tạo loại xe buýt mới
 exports.createBusType = async (req, res) => {
   try {
     const { name, description, seats, floorCount } = req.body;
-    const companyId = req.user.companyId; // Lấy `companyId` từ `req.user` sau khi xác thực
+    const companyId = req.user.companyId; 
 
     if (!companyId) {
       return res.status(403).json({ success: false, message: 'Unauthorized: CompanyId is required.' });
     }
-
-    // Kiểm tra dữ liệu đầu vào và `companyId`
     if (!name || seats === undefined || seats <= 0) {
       return res.status(400).json({ success: false, message: 'Name and a valid number of seats are required' });
     }
@@ -20,8 +17,8 @@ exports.createBusType = async (req, res) => {
       name,
       description,
       seats,
-      floorCount: floorCount || 1, // Mặc định là 1 tầng nếu không có giá trị
-      companyId, // Gán `companyId` vào loại xe
+      floorCount: floorCount || 1,
+      companyId, 
     });
 
     await newBusType.save();
@@ -138,6 +135,15 @@ exports.getBusTypeNames = async (req, res) => {
     const companyId = req.user.companyId;
 
     const busTypeNames = await BusType.find({ companyId }).select('name');
+    res.status(200).json({ success: true, data: busTypeNames });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to get bus type names', error: err.message });
+  }
+};
+
+exports.getAllBusType = async (req, res) => {
+  try {
+    const busTypeNames = await BusType.find().select('name floorCount -_id');
     res.status(200).json({ success: true, data: busTypeNames });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Failed to get bus type names', error: err.message });
