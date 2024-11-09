@@ -54,7 +54,7 @@ const redeemPointsForVoucher = async (req, res) => {
   
 
 // Tạo voucher mới (dành cho Admin hoặc chức năng quản trị)
-const createVoucher = async (req, res) => {
+const   createVoucher = async (req, res) => {
     try {
       const { code, userId, discount, expiryDate, type } = req.body;
   
@@ -84,7 +84,6 @@ const createVoucher = async (req, res) => {
     }
   };
   
-
 // Áp dụng voucher
 const applyVoucher = async (req, res) => {
   try {

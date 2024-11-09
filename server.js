@@ -81,6 +81,14 @@ app.use('/api', DriverRoutes);
 app.use('/api',RevenueRoutes)
 app.use('/api/vouchers', voucherRoutes);
 
+
+
+
+
+const systemSettingRoutes = require('./routes/systemSettingRoutes');
+app.use('/api/system-settings', systemSettingRoutes);
+
+
 io.on('connection', (socket) => {
     console.log('A user connected');
     socket.on('disconnect', () => {
