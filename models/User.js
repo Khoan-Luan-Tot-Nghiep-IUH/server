@@ -88,6 +88,7 @@ const UserSchema = new mongoose.Schema({
         default: 0,
         min: 0
     },
+    vouchers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Voucher' }],
     isActive: {
         type: Boolean,
         default: true

@@ -12,6 +12,7 @@ const payOS = new PayOS(
   process.env.PAYOS_CHECKSUM_KEY
 );
 const crypto = require('crypto');
+const Voucher = require('../models/Voucher');
 
 
 exports.getBookingDrafts = async (req, res) => {
@@ -154,8 +155,6 @@ exports.createBookingDraft = async (req, res) => {
     }
 };
 
-
-
 function generateOrderCode(bookingId) {
     const idString = bookingId.toString();
     const hash = crypto.createHash('sha256').update(idString + Date.now()).digest('hex');
@@ -163,105 +162,130 @@ function generateOrderCode(bookingId) {
     return Math.abs(orderCode);
 }
 
+
 exports.createBooking = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
-
+  
     try {
-        const { bookingId, paymentMethod } = req.body; 
-        const userId = req.user._id;
-
-        const bookingDraft = await Booking.findOne({
-            _id: bookingId,
-            user: userId,
-            status: 'Draft',
-            expiryTime: { $gt: new Date() }
-        }).session(session);
-
-        if (!bookingDraft) {
-            throw new Error('Đặt vé đã hết hạn hoặc không tồn tại');
+      const { bookingId, paymentMethod, voucherCode } = req.body; 
+      const userId = req.user._id;
+  
+      const bookingDraft = await Booking.findOne({
+        _id: bookingId,
+        user: userId,
+        status: 'Draft',
+        expiryTime: { $gt: new Date() }
+      }).session(session);
+  
+      if (!bookingDraft) {
+        throw new Error('Đặt vé đã hết hạn hoặc không tồn tại');
+      }
+  
+      // Tìm voucher nếu voucherCode được cung cấp
+      let discountAmount = 0;
+      if (voucherCode) {
+        const voucher = await Voucher.findOne({ code: voucherCode, userId, isUsed: false });
+  
+        if (!voucher) {
+          throw new Error('Voucher không tồn tại, đã hết hạn hoặc đã được sử dụng');
         }
-        const seats = await Seat.find({
-            trip: bookingDraft.trip,
-            seatNumber: { $in: bookingDraft.seatNumbers },
-            isLocked: true,
-            lockedBy: userId,
-        }).session(session);
-
-        if (seats.length !== bookingDraft.seatNumbers.length) {
-            throw new Error('Một số ghế đã không còn khả dụng');
-        }
-        bookingDraft.paymentMethod = paymentMethod;
-        bookingDraft.status = paymentMethod === 'Online' ? 'Pending' : 'Confirmed';
-        if (!bookingDraft.orderCode) {
-            bookingDraft.orderCode = generateOrderCode(bookingDraft._id);
-        }
-        await bookingDraft.save({ session });
-        await Seat.updateMany(
-            { 
-                trip: bookingDraft.trip,
-                seatNumber: { $in: bookingDraft.seatNumbers },
-                lockedBy: userId
-            },
-            { 
-                $set: { 
-                    isLocked: false,
-                    lockedBy: null,
-                    lockExpiration: null,
-                    isAvailable: false,
-                    bookedBy: userId
-                },
-                $inc: { version: 1 }
-            },
-            { session }
-        );
-        if (paymentMethod === 'Online') {
-            const paymentItems = bookingDraft.seatNumbers.map(seatNumber => {
-                const seatInfo = seats.find(s => s.seatNumber === seatNumber);
-                if (!seatInfo) {
-                    throw new Error(`Ghế số ${seatNumber} không tồn tại hoặc không có giá.`);
-                }
-                return { name: `Ghế số ${seatNumber}`, quantity: 1, price: seatInfo.price };
-            });
-
-            const paymentLinkRequest = {
-                orderCode: Number(bookingDraft.orderCode),
-                amount: bookingDraft.totalPrice,
-                description: `Thanh toán cho vé ${bookingDraft.trip.toString().slice(17, 24)}`,
-                items: paymentItems,
-                returnUrl: `http://localhost:5000/api/payment-success`,
-                cancelUrl: `http://localhost:5000/api/payment-cancel`,
-            };
-            const paymentLinkResponse = await payOS.createPaymentLink(paymentLinkRequest);
-
-            if (paymentLinkResponse.checkoutUrl) {
-                await session.commitTransaction();
-                return res.status(200).json({
-                    success: true,
-                    data: {
-                        bookingId: bookingDraft._id,
-                        paymentLink: paymentLinkResponse.checkoutUrl,
-                        qrCode: paymentLinkResponse.qrCode,
-                    }
-                });
-            } else {
-                throw new Error('Lỗi tạo link thanh toán PayOS hoặc không có checkoutUrl trong phản hồi.');
+  
+        // Áp dụng giảm giá từ voucher vào tổng giá trị đơn hàng
+        discountAmount = voucher.discount;
+        voucher.isUsed = true; // Đánh dấu voucher là đã sử dụng
+        await voucher.save({ session });
+      }
+  
+      const seats = await Seat.find({
+        trip: bookingDraft.trip,
+        seatNumber: { $in: bookingDraft.seatNumbers },
+        isLocked: true,
+        lockedBy: userId,
+      }).session(session);
+  
+      if (seats.length !== bookingDraft.seatNumbers.length) {
+        throw new Error('Một số ghế đã không còn khả dụng');
+      }
+  
+      bookingDraft.paymentMethod = paymentMethod;
+      bookingDraft.status = paymentMethod === 'Online' ? 'Pending' : 'Confirmed';
+      if (!bookingDraft.orderCode) {
+        bookingDraft.orderCode = generateOrderCode(bookingDraft._id);
+      }
+  
+      // Tính tổng giá trị sau khi áp dụng voucher và làm tròn
+      const discountedTotal = Math.round(bookingDraft.totalPrice - (bookingDraft.totalPrice * (discountAmount / 100)));
+      bookingDraft.totalPrice = discountedTotal;
+  
+      await bookingDraft.save({ session });
+  
+      await Seat.updateMany(
+        { 
+          trip: bookingDraft.trip,
+          seatNumber: { $in: bookingDraft.seatNumbers },
+          lockedBy: userId
+        },
+        { 
+          $set: { 
+            isLocked: false,
+            lockedBy: null,
+            lockExpiration: null,
+            isAvailable: false,
+            bookedBy: userId
+          },
+          $inc: { version: 1 }
+        },
+        { session }
+      );
+  
+      if (paymentMethod === 'Online') {
+        const paymentItems = bookingDraft.seatNumbers.map(seatNumber => {
+          const seatInfo = seats.find(s => s.seatNumber === seatNumber);
+          if (!seatInfo) {
+            throw new Error(`Ghế số ${seatNumber} không tồn tại hoặc không có giá.`);
+          }
+          return { name: `Ghế số ${seatNumber}`, quantity: 1, price: seatInfo.price };
+        });
+  
+        const paymentLinkRequest = {
+          orderCode: Number(bookingDraft.orderCode),
+          amount: discountedTotal, // Sử dụng tổng giá trị sau khi giảm giá
+          description: `Thanh toán cho vé ${bookingDraft.trip.toString().slice(17, 24)}`,
+          items: paymentItems,
+          returnUrl: `http://localhost:5000/api/payment-success`,
+          cancelUrl: `http://localhost:5000/api/payment-cancel`,
+        };
+        const paymentLinkResponse = await payOS.createPaymentLink(paymentLinkRequest);
+  
+        if (paymentLinkResponse.checkoutUrl) {
+          await session.commitTransaction();
+          return res.status(200).json({
+            success: true,
+            data: {
+              bookingId: bookingDraft._id,
+              paymentLink: paymentLinkResponse.checkoutUrl,
+              qrCode: paymentLinkResponse.qrCode,
+              discountedTotal // Tổng sau khi áp dụng voucher
             }
+          });
+        } else {
+          throw new Error('Lỗi tạo link thanh toán PayOS hoặc không có checkoutUrl trong phản hồi.');
         }
-        
-        // If payment method is not 'Online', complete the booking
-        await session.commitTransaction();
-        res.status(200).json({ success: true, data: bookingDraft });
-
+      }
+      
+      await session.commitTransaction();
+      res.status(200).json({ success: true, data: bookingDraft });
+  
     } catch (error) {
-        if (session.inTransaction()) {
-            await session.abortTransaction();
-        }
-        res.status(400).json({ success: false, message: error.message });
+      if (session.inTransaction()) {
+        await session.abortTransaction();
+      }
+      res.status(400).json({ success: false, message: error.message });
     } finally {
-        session.endSession();
+      session.endSession();
     }
-};
+  };
 
 exports.paymentSuccess = async (req, res) => {
     
