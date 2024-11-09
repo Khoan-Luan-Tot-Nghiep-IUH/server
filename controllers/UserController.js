@@ -8,7 +8,7 @@ const { validationResult } = require('express-validator');
 const {sendVerificationCode, verifyCode } = require('../config/twilioConfig');
 const TempUser = require('../models/TempUser');
 const Voucher = require('../models/Voucher'); 
-
+const SystemSetting = require('../models/SystemSetting'); 
 const generateVoucherCode = () => {
     return 'VOUCHER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
 };
@@ -125,7 +125,6 @@ const userRegister = async (req, res) => {
             return res.status(403).json({ success: false, msg: 'Bạn không thể tự đăng ký với vai trò này' });
         }
 
-        // Kiểm tra tồn tại của người dùng
         const existingUserByEmail = await TempUser.findOne({ email });
         if (existingUserByEmail) {
             return res.status(400).json({ success: false, msg: 'Email đã được sử dụng' });
@@ -165,12 +164,26 @@ const userRegister = async (req, res) => {
             address,
             birthDay
         });
-        console.log('Đang lưu người dùng tạm:', tempUser);
         await tempUser.save();
+        const setting = await SystemSetting.findOne();
+        if (setting && setting.allowNewUserVoucher) {
+            const voucher = new Voucher({
+                code: generateVoucherCode(),
+                userId: tempUser._id,
+                discount: 50,
+                expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                isUsed: false,
+                type: 'personal'
+            });
+            await voucher.save();
+
+            tempUser.vouchers = [voucher._id];
+            await tempUser.save();
+        }
         res.status(201).json({ success: true, msg: 'Mã xác nhận đã được gửi. Vui lòng nhập mã để hoàn tất đăng ký.' });
 
     } catch (error) {
-        console.error('Có lỗi xảy ra:', error); // In ra chi tiết lỗi
+        console.error('Có lỗi xảy ra:', error); 
         res.status(500).json({ success: false, msg: 'Đăng ký thất bại', error: error.message });
     }
 };
