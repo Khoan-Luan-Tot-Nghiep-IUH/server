@@ -3,26 +3,13 @@ const Seat = require('./models/Seat');
 
 module.exports = (io) => {
     const connectedUsers = new Map();
-    
     io.on('connection', (socket) => {
         console.log('User connected:', socket.id);
-        
         socket.on('joinTrip', (tripId) => {
-            if (!tripId) return;
             socket.join(`trip:${tripId}`);
             console.log(`Socket ${socket.id} joined trip room: trip:${tripId}`);
-        });
-
-        socket.on('leaveTrip', (tripId) => {
-            if (!tripId) return;
-            socket.leave(`trip:${tripId}`);
-            console.log(`Socket ${socket.id} left trip room: trip:${tripId}`);
-            releaseUserSeats(socket.id, tripId);  // Giải phóng ghế khi người dùng rời phòng
-        });
-
+          });          
         socket.on('reserveSeat', async ({ tripId, seatNumber, userId }) => {
-            if (!tripId || !seatNumber || !userId) return;
-
             console.log('Attempting to reserve seat:', { tripId, seatNumber, userId });
             const session = await mongoose.startSession();
             try {
@@ -82,10 +69,8 @@ module.exports = (io) => {
             }
         });
         
+
         socket.on('releaseSeat', async ({ tripId, seatNumber, userId }) => {
-            console.log(`Releasing seat ${seatNumber} for trip ${tripId}`);
-            if (!tripId || !seatNumber || !userId) return;
-            console.log(`Releasing seat ${seatNumber} for trip ${tripId}`);
             const session = await mongoose.startSession();
             try {
                 await session.withTransaction(async () => {
@@ -108,10 +93,7 @@ module.exports = (io) => {
                     );
 
                     if (seat) {
-                        if (seatReleased) {
-                            io.to(`trip:${tripId}`).emit('seatReleased', { seatNumber });
-                        }                        
-                        console.log(`Backend: Seat ${seatNumber} for trip ${tripId} has been released.`);                        
+                        io.to(`trip:${tripId}`).emit('seatReleased', { tripId, seatNumber });
                         const userData = connectedUsers.get(socket.id);
                         if (userData) {
                             userData.lockedSeats = userData.lockedSeats.filter(
@@ -135,22 +117,15 @@ module.exports = (io) => {
 
         socket.on('disconnect', async () => {
             console.log('User disconnected:', socket.id);
-            await releaseUserSeats(socket.id); // Giải phóng ghế khi người dùng ngắt kết nối
-            connectedUsers.delete(socket.id);
-        });
-
-        // Hàm giải phóng ghế
-        async function releaseUserSeats(socketId, tripId) {
-            const userData = connectedUsers.get(socketId);
+            const userData = connectedUsers.get(socket.id);
             if (userData?.lockedSeats?.length) {
                 const session = await mongoose.startSession();
                 try {
                     await session.withTransaction(async () => {
-                        for (const { tripId: seatTripId, seatNumber } of userData.lockedSeats) {
-                            if (tripId && seatTripId !== tripId) continue; // Giải phóng ghế cho trip cụ thể nếu có
+                        for (const { tripId, seatNumber } of userData.lockedSeats) {
                             await Seat.findOneAndUpdate(
                                 {
-                                    trip: seatTripId,
+                                    trip: tripId,
                                     seatNumber,
                                     lockedBy: new mongoose.Types.ObjectId(userData.userId)
                                 },
@@ -165,7 +140,7 @@ module.exports = (io) => {
                                 { session }
                             );
                             
-                            io.to(`trip:${seatTripId}`).emit('seatReleased', { tripId: seatTripId, seatNumber });
+                            io.to(`trip:${tripId}`).emit('seatReleased', { tripId, seatNumber });
                         }
                     });
                 } catch (error) {
@@ -174,10 +149,10 @@ module.exports = (io) => {
                     session.endSession();
                 }
             }
-        }
+            
+            connectedUsers.delete(socket.id);
+        });
     });
-
-    // Cron job giải phóng ghế đã hết hạn
     setInterval(async () => {
         try {
             const expiredSeats = await Seat.find({
