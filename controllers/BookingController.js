@@ -388,7 +388,6 @@ exports.confirmPaymentOnBoard = async (req, res) => {
     }
 };
 
-
 exports.cancelBooking = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
