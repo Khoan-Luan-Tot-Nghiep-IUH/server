@@ -9,6 +9,7 @@ const {sendVerificationCode, verifyCode } = require('../config/twilioConfig');
 const TempUser = require('../models/TempUser');
 const Voucher = require('../models/Voucher'); 
 const SystemSetting = require('../models/SystemSetting'); 
+const { isStrongPassword } = require('validator');
 const generateVoucherCode = () => {
     return 'VOUCHER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
 };
@@ -320,30 +321,31 @@ const getUserDetails = async (req, res) => {
 
 const changePassword = async (req, res) => {
     try {
-        const userId = req.params.userId;
+        const userId = req.user.id; 
         const { currentPassword, newPassword, confirmNewPassword } = req.body;
-
         const user = await User.findById(userId);
         if (!user) {
-            return res.status(404).json({ msg: 'Không tìm thấy người dùng' });
+            return res.status(404).json({ success: false, msg: 'Không tìm thấy người dùng' });
         }
-
         const isPasswordValid = await argon2.verify(user.password, currentPassword);
         if (!isPasswordValid) {
-            return res.status(401).json({ msg: 'Mật khẩu hiện tại không đúng' });
+            return res.status(401).json({ success: false, msg: 'Mật khẩu hiện tại không đúng' });
         }
-
         if (newPassword !== confirmNewPassword) {
-            return res.status(400).json({ msg: 'Mật khẩu mới và xác nhận mật khẩu không khớp' });
+            return res.status(400).json({ success: false, msg: 'Mật khẩu mới và xác nhận mật khẩu không khớp' });
         }
-
+        if (!isStrongPassword(newPassword, { minLength: 8, minSymbols: 1, minNumbers: 1, minUppercase: 1 })) {
+            return res.status(400).json({ 
+                success: false, 
+                msg: 'Mật khẩu mới phải có ít nhất 8 ký tự, bao gồm ký tự viết hoa, ký tự đặc biệt và số.' 
+            });
+        }
         const hashPass = await argon2.hash(newPassword);
-
         await User.findByIdAndUpdate(userId, { password: hashPass }, { new: true });
 
-        return res.status(200).json({ msg: 'Cập nhật mật khẩu thành công' });
+        return res.status(200).json({ success: true, msg: 'Cập nhật mật khẩu thành công' });
     } catch (error) {
-        return res.status(500).json({ error: 'Lỗi server', details: error.message });
+        return res.status(500).json({ success: false, msg: 'Lỗi server', details: error.message });
     }
 };
 
