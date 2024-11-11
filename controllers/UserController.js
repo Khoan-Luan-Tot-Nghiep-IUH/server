@@ -187,14 +187,17 @@ const userRegister = async (req, res) => {
         res.status(500).json({ success: false, msg: 'Đăng ký thất bại', error: error.message });
     }
 };
+
 const confirmRegistration = async (req, res) => {
     const { verificationMethod, phoneNumber, email, verificationCode } = req.body;
 
     try {
         let status;
         if (verificationMethod === 'phone') {
+            // Xác minh bằng số điện thoại
             status = await verifyCode(phoneNumber, verificationCode);
         } else if (verificationMethod === 'email') {
+            // Xác minh bằng email
             status = await verifyCodeEmail(email, verificationCode);
         } else {
             return res.status(400).json({ success: false, msg: 'Phương thức xác nhận không hợp lệ' });
@@ -204,10 +207,13 @@ const confirmRegistration = async (req, res) => {
             return res.status(400).json({ success: false, msg: 'Mã xác nhận không chính xác hoặc đã hết hạn' });
         }
 
-        // Kiểm tra người dùng tạm theo email
-        const tempUser = await TempUser.findOne({ email });
+        // Tìm người dùng tạm dựa trên phương thức xác minh
+        const tempUser = verificationMethod === 'phone'
+            ? await TempUser.findOne({ phoneNumber })
+            : await TempUser.findOne({ email });
+
         if (!tempUser) {
-            return res.status(400).json({ success: false, msg: 'Email không tồn tại' });
+            return res.status(400).json({ success: false, msg: `${verificationMethod === 'phone' ? 'Số điện thoại' : 'Email'} không tồn tại` });
         }
 
         // Tiến hành lưu người dùng chính thức
@@ -223,7 +229,7 @@ const confirmRegistration = async (req, res) => {
         });
 
         await newUser.save();
-        await TempUser.deleteOne({ email }); // Xóa người dùng tạm
+        await TempUser.deleteOne({ _id: tempUser._id }); // Xóa người dùng tạm dựa trên `_id`
 
         res.status(201).json({ success: true, msg: 'Đăng ký thành công', newUser });
     } catch (error) {
@@ -231,6 +237,7 @@ const confirmRegistration = async (req, res) => {
         res.status(500).json({ success: false, msg: 'Xác nhận đăng ký thất bại', error: error.message });
     }
 };
+
 const userLogin = async (req, res) => {
     const { userName, password } = req.body;
 
