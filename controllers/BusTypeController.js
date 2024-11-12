@@ -1,10 +1,11 @@
 const BusType = require('../models/BusType');
 const Trip = require('../models/Trip');
+const {uploadImage}  = require('../config/cloudinaryConfig');
 
 exports.createBusType = async (req, res) => {
   try {
     const { name, description, seats, floorCount } = req.body;
-    const companyId = req.user.companyId; 
+    const companyId = req.user.companyId;
 
     if (!companyId) {
       return res.status(403).json({ success: false, message: 'Unauthorized: CompanyId is required.' });
@@ -13,12 +14,22 @@ exports.createBusType = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Name and a valid number of seats are required' });
     }
 
+    let imageUrls = [];
+
+    if (req.files) {
+      for (const file of req.files) {
+        const { url } = await uploadImage(file.path, 'bus_types');
+        imageUrls.push(url);
+      }
+    }
+
     const newBusType = new BusType({
       name,
       description,
       seats,
       floorCount: floorCount || 1,
-      companyId, 
+      companyId,
+      images: imageUrls
     });
 
     await newBusType.save();
