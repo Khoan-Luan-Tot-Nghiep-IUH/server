@@ -93,7 +93,8 @@ exports.updateBusType = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Unauthorized access: CompanyId is required.' });
     }
 
-    if (!name && !description && seats === undefined && floorCount === undefined) {
+    // Check if there are any fields to update
+    if (!name && !description && seats === undefined && floorCount === undefined && !req.files) {
       return res.status(400).json({ success: false, message: 'No fields to update' });
     }
 
@@ -102,7 +103,23 @@ exports.updateBusType = async (req, res) => {
     if (description !== undefined) updates.description = description;
     if (seats !== undefined && seats > 0) updates.seats = seats;
     if (floorCount !== undefined && floorCount > 0) updates.floorCount = floorCount;
-    const updatedBusType = await BusType.findOneAndUpdate({ _id: id, companyId }, updates, { new: true });
+
+    // Handle images if provided in the update request
+    if (req.files && req.files.length > 0) {
+      let imageUrls = [];
+      for (const file of req.files) {
+        const { url } = await uploadImage(file.path, 'bus_types'); // Upload to Cloudinary
+        imageUrls.push(url);
+      }
+      updates.images = imageUrls; // This will replace the existing images
+    }
+
+    // Update the bus type
+    const updatedBusType = await BusType.findOneAndUpdate(
+      { _id: id, companyId },
+      updates,
+      { new: true }
+    );
 
     if (!updatedBusType) {
       return res.status(404).json({ success: false, message: 'Bus type not found or access denied.' });
@@ -113,6 +130,7 @@ exports.updateBusType = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to update bus type', error: err.message });
   }
 };
+
 
 exports.deleteBusType = async (req, res) => {
   try {

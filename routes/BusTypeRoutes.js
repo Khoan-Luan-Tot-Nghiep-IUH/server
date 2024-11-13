@@ -18,11 +18,13 @@ router.post('/bus-types', checkCompanyAdmin, upload.array('images', 5), busTypeC
 // Lấy danh sách tất cả các loại xe buýt thuộc công ty của người dùng hiện tại (Yêu cầu xác thực)
 router.get('/bus-types', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, busTypeController.getBusTypes);
 
+
 // Lấy chi tiết một loại xe buýt cụ thể (Yêu cầu xác thực và thuộc công ty hiện tại)
 router.get('/bus-types/:id', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, busTypeController.getBusTypeById);
 
 // Cập nhật thông tin loại xe buýt (Yêu cầu quyền Super Admin hoặc Company Admin)
-router.put('/bus-types/:id', checkSuperAdminOrCompanyAdmin, busTypeController.updateBusType);
+router.put('/bus-types/:id', checkSuperAdminOrCompanyAdmin,upload.array('images', 5), busTypeController.updateBusType);
+
 router.delete('/bus-types/:id', checkSuperAdminOrCompanyAdmin, busTypeController.deleteBusType);
 router.get('/bus-types/names', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, busTypeController.getBusTypeNames);
 
