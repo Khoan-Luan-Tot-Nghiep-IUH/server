@@ -87,7 +87,8 @@ app.use('/api/vouchers', voucherRoutes);
 
 const systemSettingRoutes = require('./routes/systemSettingRoutes');
 app.use('/api/system-settings', systemSettingRoutes);
-
+const faqRoutes = require('./routes/FaqRoutes');
+app.use('/api/faqs', faqRoutes);
 
 io.on('connection', (socket) => {
     console.log('A user connected');
