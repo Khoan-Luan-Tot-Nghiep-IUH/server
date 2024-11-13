@@ -38,6 +38,7 @@ router.get('/google/callback',
 
       // Chuyển hướng về phía client với token
       res.redirect(`${process.env.CLIENT_URL}/login?token=${token}`);
+      console.log("Redirect URI:", `${process.env.CLIENT_URL}/api/user/google/callback`);
     } catch (error) {
       console.error('Error in Google callback:', error); // Log lỗi chi tiết
       res.status(500).json({ message: 'Google login failed', error: error.message });
