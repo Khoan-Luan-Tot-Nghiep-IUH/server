@@ -131,7 +131,6 @@ exports.updateBusType = async (req, res) => {
   }
 };
 
-
 exports.deleteBusType = async (req, res) => {
   try {
     const { id } = req.params;
@@ -158,7 +157,6 @@ exports.deleteBusType = async (req, res) => {
   }
 };
 
-
 exports.getBusTypeNames = async (req, res) => {
   try {
     const companyId = req.user.companyId;
@@ -172,9 +170,10 @@ exports.getBusTypeNames = async (req, res) => {
 
 exports.getAllBusType = async (req, res) => {
   try {
-    const busTypeNames = await BusType.find().select('name floorCount -_id');
+    const busTypeNames = await BusType.find().select('name floorCount -_id images');
     res.status(200).json({ success: true, data: busTypeNames });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Failed to get bus type names', error: err.message });
   }
 };
+
