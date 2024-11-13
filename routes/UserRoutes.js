@@ -6,8 +6,22 @@ const authMiddleware = require('../middleware/authMiddleware');
 const { facebookLogin, facebookCallback } = require('../controllers/facebookAuthController');
 const passport = require('passport');
 const User = require('../models/User');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 
-// Google Authentication Routes
+
+const googleStrategyOptions = {
+  clientID: process.env.GOOGLE_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  callbackURL: process.env.NODE_ENV === 'production'
+    ? 'https://server-zeym.onrender.com/api/user/google/callback'
+    : 'http://localhost:5000/api/user/google/callback'
+};
+
+
+passport.use(new GoogleStrategy(googleStrategyOptions, async (accessToken, refreshToken, profile, done) => {
+}));
+
+
 router.get('/google', 
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
@@ -38,7 +52,6 @@ router.get('/google/callback',
 
       // Chuyển hướng về phía client với token
       res.redirect(`${process.env.CLIENT_URL}/login?token=${token}`);
-      console.log("Redirect URI:", `${process.env.CLIENT_URL}/api/user/google/callback`);
     } catch (error) {
       console.error('Error in Google callback:', error); // Log lỗi chi tiết
       res.status(500).json({ message: 'Google login failed', error: error.message });
