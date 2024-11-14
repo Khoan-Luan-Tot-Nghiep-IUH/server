@@ -83,7 +83,7 @@ const cancelExpiredOnlineBookings = cron.schedule('*/10 * * * *', async () => { 
  * Cron Job 2: Cập Nhật Trạng Thái Chuyến Đi Đã Hoàn Thành
  * Chạy vào lúc 00:00 mỗi ngày
  */
-const updateCompletedTrips = cron.schedule('0 0 * * *', async () => { 
+const updateCompletedTrips = cron.schedule('0 */12 * * *', async () => { 
     console.log('Cron Job: Cập nhật trạng thái chuyến đi đã hoàn thành chạy lúc:', new Date());
 
     try {
@@ -111,6 +111,7 @@ const updateCompletedTrips = cron.schedule('0 0 * * *', async () => {
     scheduled: true,
     timezone: "Asia/Ho_Chi_Minh", 
 });
+
 
 
 const cancelUnpaidDraftBookings = cron.schedule('*/10 * * * *', async () => { // Chạy mỗi 10 phút
