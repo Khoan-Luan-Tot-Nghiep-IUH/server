@@ -2,9 +2,12 @@ const cron = require('node-cron');
 const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
 const Seat = require('../models/Seat');
-const Trip = require('../models/Trip'); // Thêm model Trip
+const Trip = require('../models/Trip'); 
 const dotenv = require('dotenv');
-
+const Location = require('../models/Location');
+const Company = require('../models/Company');
+const BusType = require('../models/BusType');
+const moment = require('moment-timezone');
 dotenv.config();
 
 if (mongoose.connection.readyState === 0) {
@@ -79,10 +82,6 @@ const cancelExpiredOnlineBookings = cron.schedule('*/10 * * * *', async () => { 
 });
 
 
-/**
- * Cron Job 2: Cập Nhật Trạng Thái Chuyến Đi Đã Hoàn Thành
- * Chạy vào lúc 00:00 mỗi ngày
- */
 const updateCompletedTrips = cron.schedule('0 */12 * * *', async () => { 
     console.log('Cron Job: Cập nhật trạng thái chuyến đi đã hoàn thành chạy lúc:', new Date());
 
@@ -111,7 +110,6 @@ const updateCompletedTrips = cron.schedule('0 */12 * * *', async () => {
     scheduled: true,
     timezone: "Asia/Ho_Chi_Minh", 
 });
-
 
 
 const cancelUnpaidDraftBookings = cron.schedule('*/10 * * * *', async () => { // Chạy mỗi 10 phút
@@ -173,8 +171,115 @@ const cancelUnpaidDraftBookings = cron.schedule('*/10 * * * *', async () => { //
     timezone: "Asia/Ho_Chi_Minh",
 });
 
+const createDailyTrips = cron.schedule('0 */12 * * *', async () => {
+    console.log('Cron Job: Tạo chuyến đi chạy thử nghiệm mỗi 10 phút lúc:', new Date());
+
+    try {
+        // Lấy tất cả các công ty
+        const companies = await Company.find({});
+        
+        for (const company of companies) {
+            // Lấy tất cả loại xe của công ty
+            const busTypes = await BusType.find({ companyId: company._id });
+            if (busTypes.length === 0) {
+                console.log(`Không có loại xe nào cho công ty ${company._id}`);
+                continue;
+            }
+
+            // Lấy tất cả các địa điểm
+            const locations = await Location.find({});
+            if (locations.length < 2) {
+                console.log('Không đủ địa điểm để tạo chuyến đi');
+                continue;
+            }
+
+            // Tạo chuyến đi cho mỗi cặp điểm đi - điểm đến và mỗi loại xe
+            for (let i = 0; i < locations.length; i++) {
+                for (let j = 0; j < locations.length; j++) {
+                    if (i === j) continue; // Bỏ qua nếu điểm đi và điểm đến trùng nhau
+
+                    const departureLocation = locations[i]._id;
+                    const arrivalLocation = locations[j]._id;
+
+                    for (const busType of busTypes) {
+                        // Thiết lập thời gian khởi hành và thời gian đến
+                        const departureTime = moment().tz('Asia/Ho_Chi_Minh').set({ hour: 8, minute: 0 }).toDate();
+                        const arrivalTime = moment(departureTime).add(9, 'hours').toDate();
+
+                        // Tạo chuyến đi mới
+                        const newTrip = new Trip({
+                            departureLocation,
+                            arrivalLocation,
+                            departureTime,
+                            arrivalTime,
+                            busType: busType._id,
+                            schedule: [], // Điều chỉnh nếu cần
+                            basePrice: 100000, // Giá vé mẫu, có thể thay đổi
+                            companyId: company._id,
+                            drivers: [], // Gán danh sách tài xế nếu có
+                            isRoundTrip: false,
+                            status: "Scheduled"
+                        });
+
+                        await newTrip.save();
+                        console.log(`Đã tạo chuyến đi cho công ty ${company._id} từ ${locations[i].name} đến ${locations[j].name} với loại xe ${busType.name}`);
+
+                        // Tạo ghế cho chuyến đi
+                        const seats = [];
+                        const totalSeats = busType.seats;
+                        const floors = busType.floorCount || 1; 
+                        const rows = ['Front', 'Middle', 'Back']; 
+                        let seatNumber = 1;
+
+                        for (let floor = 1; floor <= floors; floor++) {
+                            for (let row of rows) {
+                                const seatsInRow = Math.ceil(totalSeats / (floors * rows.length));
+                                for (let i = 0; i < seatsInRow; i++) {
+                                    if (seatNumber > totalSeats) break;
+
+                                    let seatPrice = newTrip.basePrice;
+                                    let isAvailable = true;
+                                    let isVIP = false;
+
+                                    // Đặt ghế số 1 là không bán, các ghế 2-6 là VIP
+                                    if (seatNumber === 1) {
+                                        isAvailable = false;
+                                    }
+                                    if ([2, 3, 4, 5, 6].includes(seatNumber)) {
+                                        isVIP = true;
+                                        seatPrice = newTrip.basePrice * 1.5; // Giá ghế VIP cao hơn 50%
+                                    }
+
+                                    seats.push({
+                                        trip: newTrip._id,
+                                        seatNumber: seatNumber++,
+                                        isAvailable: isAvailable,
+                                        isVIP: isVIP,
+                                        price: seatPrice,
+                                        seatRow: row,
+                                        floor: floor
+                                    });
+                                }
+                            }
+                        }
+
+                        await Seat.insertMany(seats);
+                        console.log(`Đã tạo ${seats.length} ghế cho chuyến đi ${newTrip._id}`);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Lỗi trong quá trình chạy Cron Job Tạo Chuyến Đi Thử Nghiệm:', error);
+    }
+}, {
+    scheduled: true,
+    timezone: "Asia/Ho_Chi_Minh",
+});
+
 module.exports = {
     cancelExpiredOnlineBookings,
     updateCompletedTrips,
-    cancelUnpaidDraftBookings
+    cancelUnpaidDraftBookings,
+    createDailyTrips
 };
