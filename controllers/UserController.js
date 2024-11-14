@@ -2,7 +2,7 @@ const User = require('../models/User');
 const argon2 = require('argon2');
 const {generateAccessToken } = require('../middleware/authMiddleware');
 const crypto = require('crypto');
-const { sendOrderConfirmationEmail, sendVerificationEmail, verifyCodeEmail } = require('../config/mailer');
+const { sendOrderConfirmationEmail, sendVerificationEmail, verifyCodeEmail, sendPasswordResetEmail, verifyPasswordResetCode } = require('../config/mailer');
 const moment = require('moment-timezone');
 const { validationResult } = require('express-validator');
 const {sendVerificationCode, verifyCode } = require('../config/twilioConfig');
@@ -10,6 +10,7 @@ const TempUser = require('../models/TempUser');
 const Voucher = require('../models/Voucher'); 
 const SystemSetting = require('../models/SystemSetting'); 
 const { isStrongPassword } = require('validator');
+const PasswordResetCodeModel = require('../models/passwordResetCodeSchema');
 const generateVoucherCode = () => {
     return 'VOUCHER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
 };
@@ -59,31 +60,83 @@ const redeemPointsForVoucher = async (req, res) => {
     }
 };
 
-const sendResetPasswordEmail = async (req, res) => {
+
+const sendResetCode = async (req, res) => {
+    const { identifier } = req.body;
+
     try {
-        const { email } = req.body;
-        const user = await User.findOne({ email });
+        const user = identifier.includes('@') 
+            ? await User.findOne({ email: identifier }) 
+            : await User.findOne({ phoneNumber: identifier });
+
         if (!user) {
-            return res.status(404).json({ success: false, msg: 'Email không tồn tại' });
+            return res.status(404).json({ success: false, msg: 'Người dùng không tồn tại' });
         }
-        const resetToken = crypto.randomBytes(32).toString('hex');
-        const resetTokenExpiry = Date.now() + 3600000;
-        user.resetToken = resetToken;
-        user.resetTokenExpiry = resetTokenExpiry;
-        await user.save();
-        const htmlContent = `
-            <h3>Đặt lại mật khẩu</h3>
-            <p>Nhấp vào liên kết bên dưới để đặt lại mật khẩu của bạn:</p>
-            <a href="${process.env.BASE_URL}/reset-password/${resetToken}">Đặt lại mật khẩu</a>
-        `;
-        await sendOrderConfirmationEmail(user.email, 'Đặt lại mật khẩu của bạn', htmlContent);
 
-        res.status(200).json({ success: true, msg: 'Email reset mật khẩu đã được gửi' });
+        if (identifier.includes('@')) {
+            const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+            await sendPasswordResetEmail(identifier, resetCode);
+        } else {
+            const status = await sendVerificationCode(identifier);
+            if (status !== 'pending') {
+                return res.status(500).json({ success: false, msg: 'Gửi mã xác minh qua SMS thất bại' });
+            }
+        }
 
+        res.status(200).json({ success: true, msg: 'Mã xác minh đã được gửi' });
     } catch (error) {
-        res.status(500).json({ success: false, msg: 'Gửi email thất bại', error: error.message });
+        res.status(500).json({ success: false, msg: 'Gửi mã thất bại', error: error.message });
     }
 };
+
+const verifyResetCode = async (req, res) => {
+    const { identifier, resetCode, newPassword, confirmNewPassword } = req.body;
+
+    try {
+        let isValidCode = false;
+
+        if (identifier.includes('@')) {
+            // Kiểm tra mã trong cơ sở dữ liệu cho email
+            const record = await PasswordResetCodeModel.findOne({
+                identifier,
+                code: resetCode,
+                expiry: { $gt: Date.now() }
+            });
+
+            isValidCode = !!record;
+        } else {
+            // Kiểm tra mã qua Twilio Verify Service cho số điện thoại
+            const status = await verifyCode(identifier, resetCode);
+            isValidCode = (status === 'approved');
+        }
+
+        if (!isValidCode) {
+            return res.status(400).json({ success: false, msg: 'Mã xác nhận không chính xác hoặc đã hết hạn' });
+        }
+
+        if (newPassword !== confirmNewPassword) {
+            return res.status(400).json({ success: false, msg: 'Mật khẩu mới và xác nhận mật khẩu không khớp' });
+        }
+
+        const hashPass = await argon2.hash(newPassword);
+        const user = identifier.includes('@')
+            ? await User.findOneAndUpdate({ email: identifier }, { password: hashPass })
+            : await User.findOneAndUpdate({ phoneNumber: identifier }, { password: hashPass });
+
+        if (!user) {
+            return res.status(404).json({ success: false, msg: 'Không tìm thấy người dùng' });
+        }
+
+        if (identifier.includes('@')) {
+            await PasswordResetCodeModel.deleteOne({ identifier, code: resetCode });
+        }
+
+        res.status(200).json({ success: true, msg: 'Mật khẩu đã được cập nhật' });
+    } catch (error) {
+        res.status(500).json({ success: false, msg: 'Cập nhật mật khẩu thất bại', error: error.message });
+    }
+};
+
 
 const resetPassword = async (req, res) => {
     try {
@@ -520,7 +573,6 @@ const getAllUsersByLastLogin = async (req, res) => {
 
 
 module.exports = {
-    sendResetPasswordEmail,
     resetPassword,
     userRegister,
     userLogin,
@@ -530,6 +582,8 @@ module.exports = {
     getAllUsers,
     getUsersByRole,
     updateUserStatus,
+    verifyResetCode,
+    sendResetCode,
     addLoyaltyPoints,
     searchUsers,
     confirmRegistration,

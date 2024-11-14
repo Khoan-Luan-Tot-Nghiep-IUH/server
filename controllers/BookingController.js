@@ -250,11 +250,12 @@ exports.createBooking = async (req, res) => {
   
         const paymentLinkRequest = {
           orderCode: Number(bookingDraft.orderCode),
-          amount: discountedTotal, // Sử dụng tổng giá trị sau khi giảm giá
+          amount: discountedTotal, 
           description: `Thanh toán cho vé ${bookingDraft.trip.toString().slice(17, 24)}`,
           items: paymentItems,
-          returnUrl: `http://localhost:5000/api/payment-success`,
-          cancelUrl: `http://localhost:5000/api/payment-cancel`,
+         returnUrl: `${process.env.API_URL}/api/payment-success`,
+        cancelUrl: `${process.env.API_URL}/api/payment-cancel`,
+
         };
         const paymentLinkResponse = await payOS.createPaymentLink(paymentLinkRequest);
   
@@ -266,7 +267,7 @@ exports.createBooking = async (req, res) => {
               bookingId: bookingDraft._id,
               paymentLink: paymentLinkResponse.checkoutUrl,
               qrCode: paymentLinkResponse.qrCode,
-              discountedTotal // Tổng sau khi áp dụng voucher
+              discountedTotal
             }
           });
         } else {

@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const VerificationCodeModel = require('../models/verificationCodeSchema');
+const passwordResetCodeSchema = require('../models/passwordResetCodeSchema');
 require('dotenv').config();
 
 const transporter = nodemailer.createTransport({
@@ -37,11 +38,8 @@ const sendVerificationEmail = async (email, verificationCode) => {
     try {
         await sendOrderConfirmationEmail(email, subject, htmlContent);
         console.log('Email sent successfully');
-        
-        // Lưu mã vào cơ sở dữ liệu
         await VerificationCodeModel.create({ email, code: verificationCode });
-        
-        return 'pending'; // Trả về trạng thái đã gửi thành công
+        return 'pending';
     } catch (error) {
         console.error('Error sending email:', error);
         throw new Error('Gửi mã xác nhận thất bại');
@@ -59,5 +57,39 @@ const verifyCodeEmail = async (email, code) => {
     }
 };
 
+const sendPasswordResetEmail = async (email, resetCode) => {
+    const subject = 'Mã xác nhận quên mật khẩu';
+    const htmlContent = `
+        <h1>Quên mật khẩu</h1>
+        <p>Vui lòng nhập mã xác nhận sau để đặt lại mật khẩu của bạn:</p>
+        <h2>${resetCode}</h2>
+    `;
 
-module.exports = { sendOrderConfirmationEmail, sendVerificationEmail, verifyCodeEmail };
+    try {
+        await sendOrderConfirmationEmail(email, subject, htmlContent);
+        await passwordResetCodeSchema.create({
+            identifier: email,
+            code: resetCode,
+            expiry: Date.now() + 3600000
+        });
+        return 'pending';
+    } catch (error) {
+        console.error('Error sending email:', error);
+        throw new Error('Gửi mã xác nhận thất bại');
+    }
+};
+
+const verifyPasswordResetCode = async (identifier, code) => {
+    const record = await passwordResetCodeSchema.findOne({
+        identifier,
+        code,
+        expiry: { $gt: Date.now() }
+    });
+
+    if (record) {
+        return 'approved';
+    } else {
+        return 'denied';
+    }
+};
+module.exports = { verifyPasswordResetCode,sendOrderConfirmationEmail, sendVerificationEmail,sendPasswordResetEmail ,verifyCodeEmail };

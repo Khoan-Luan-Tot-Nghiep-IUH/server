@@ -66,13 +66,16 @@ router.get('/facebook/callback', facebookCallback);
 // Public routes
 router.post('/register', userController.userRegister);
 router.post('/verify', userController.confirmRegistration);
-
 router.post('/login', userController.userLogin);
-router.post('/forgot-password', userController.sendResetPasswordEmail);
-router.post('/reset-password/:token', userController.resetPassword);
+
+//gửi mã trước 
+router.post('/forgot-password', userController.sendResetCode);
+//xác nhận mã và nhập passmoi
+router.post('/verify-reset-code', userController.verifyResetCode);
+
 
 // Protected routes (User must be authenticated)
-router.use(authMiddleware.verifyToken);  // All routes below will require token
+router.use(authMiddleware.verifyToken);
 
 // User-specific routes (Authenticated users)
 router.get('/profile/:userId',authMiddleware.verifyToken, authMiddleware.isUser, userController.getUserDetails);
