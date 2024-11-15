@@ -57,11 +57,9 @@ const updateTripStatus = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Bạn không có quyền cập nhật chuyến đi này.' });
         }
 
-        // Cập nhật trạng thái chuyến đi
         trip.status = status;
         await trip.save();
 
-        // Nếu trạng thái là 'Completed', thêm chuyến đi vào danh sách `completedTrips` của tài xế
         if (status === 'Completed') {
             await Driver.findOneAndUpdate(
                 { userId: req.user._id },
@@ -84,7 +82,6 @@ const updateTripStatus = async (req, res) => {
 const getTripPassengers = async (req, res) => {
     try {
         const { tripId } = req.params;
-        
         const trip = await Trip.findById(tripId);
         if (!trip) {
             return res.status(404).json({ success: false, message: 'Chuyến đi không tồn tại.' });
@@ -95,21 +92,34 @@ const getTripPassengers = async (req, res) => {
         if (!driverIds.includes(driverId.toString())) {
             return res.status(403).json({ success: false, message: 'Bạn không có quyền truy cập vào danh sách hành khách của chuyến đi này.' });
         }
+        const passengers = await Booking.find({ trip: tripId, paymentStatus: 'Unpaid', paymentMethod: 'OnBoard' })
+            .populate('user', 'fullName email phone')   
+            .select('user isCheckedIn paymentStatus paymentMethod totalPrice');
 
-        const passengers = await Booking.find({ trip: tripId })
-            .populate('user', 'fullName email phone')
-            .select('user isCheckedIn'); 
+        let totalAmountDue = 0; 
 
-        const formattedPassengers = passengers.map(passenger => ({
-            bookingId: passenger._id,
-            userId: passenger.user._id,
-            fullName: passenger.user.fullName,
-            email: passenger.user.email,
-            phone: passenger.user.phone,
-            isCheckedIn: passenger.isCheckedIn
-        }));
+        const formattedPassengers = passengers.map(passenger => {
+            const amountDue = passenger.totalPrice;
+            totalAmountDue += amountDue;
 
-        res.status(200).json({ success: true, passengers: formattedPassengers });
+            return {
+                bookingId: passenger._id,
+                userId: passenger.user._id,
+                fullName: passenger.user.fullName,
+                email: passenger.user.email,
+                phone: passenger.user.phone,
+                isCheckedIn: passenger.isCheckedIn,
+                paymentStatus: passenger.paymentStatus,
+                paymentMethod: passenger.paymentMethod,
+                amountDue: amountDue
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            totalAmountDue,
+            passengers: formattedPassengers
+        });
     } catch (error) {
         console.error('Error details:', error);
         res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách hành khách.', error: error.message });
@@ -120,29 +130,56 @@ const getTripPassengers = async (req, res) => {
 const checkInPassenger = async (req, res) => {
     try {
         const { tripId, bookingId } = req.params;
+
+        // Kiểm tra chuyến đi
         const trip = await Trip.findById(tripId);
         if (!trip) {
             return res.status(404).json({ success: false, message: 'Không tìm thấy chuyến đi.' });
         }
 
+        // Kiểm tra quyền tài xế
         const driverIds = trip.drivers.map(driver => driver.toString());
         if (!driverIds.includes(req.user._id.toString())) {
             return res.status(403).json({ success: false, message: 'Bạn không có quyền xác nhận hành khách của chuyến đi này.' });
         }
 
+        // Kiểm tra thông tin booking
         const booking = await Booking.findOne({ _id: bookingId, trip: tripId });
         if (!booking) {
             return res.status(404).json({ success: false, message: 'Không tìm thấy booking cho hành khách này.' });
         }
+
+        // Tìm tài xế trong database
+        const driver = await Driver.findOne({ userId: req.user._id });
+        if (!driver) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin tài xế.' });
+        }
+
+        // Log giá trị hiện tại của amountCollectedByDriver và totalPrice trong booking
+        console.log("Current amountCollectedByDriver:", driver.amountCollectedByDriver);
+        console.log("Booking totalPrice:", booking.totalPrice);
+
+        // Xử lý thanh toán nếu phương thức là 'OnBoard' và chưa thanh toán
         if (booking.paymentMethod === 'OnBoard' && booking.paymentStatus === 'Unpaid') {
             booking.paymentStatus = 'Paid';
-            trip.totalAmountCollected = (trip.totalAmountCollected || 0) + booking.price;
-            await trip.save();
+
+            // Kiểm tra và cộng số tiền cần thu vào amountCollectedByDriver
+            if (typeof booking.totalPrice === 'number' && booking.totalPrice > 0) {
+                driver.amountCollectedByDriver = (driver.amountCollectedByDriver || 0) + booking.totalPrice;
+                await driver.save();
+                console.log(`Updated amountCollectedByDriver after save: ${driver.amountCollectedByDriver}`);
+            } else {
+                console.log("Invalid or zero totalPrice in booking:", booking.totalPrice);
+            }
+        } else {
+            console.log("Payment not required or already paid.");
         }
+
+        // Đánh dấu hành khách đã check-in
         booking.isCheckedIn = true;
         await booking.save();
 
-        return res.status(200).json({
+        res.status(200).json({
             success: true,
             message: booking.paymentStatus === 'Paid'
                 ? 'Hành khách đã thanh toán tiền mặt và được xác nhận lên xe thành công.'
@@ -153,7 +190,7 @@ const checkInPassenger = async (req, res) => {
                 isCheckedIn: booking.isCheckedIn,
                 paymentMethod: booking.paymentMethod,
                 paymentStatus: booking.paymentStatus,
-                totalAmountCollected: trip.totalAmountCollected,
+                amountCollectedByDriver: driver.amountCollectedByDriver // Số tiền đã thu được cập nhật
             }
         });
     } catch (error) {
