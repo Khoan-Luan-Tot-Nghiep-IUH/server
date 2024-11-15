@@ -36,6 +36,7 @@ const DriverSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
+    amountCollectedByDriver: { type: Number, default: 0 },
     isActive: { 
         type: Boolean,
         default: true
