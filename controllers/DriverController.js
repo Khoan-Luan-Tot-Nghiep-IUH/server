@@ -116,12 +116,10 @@ const getTripPassengers = async (req, res) => {
     }
 };
 
-//xacs nhan hanh khach da len xe
+
 const checkInPassenger = async (req, res) => {
     try {
         const { tripId, bookingId } = req.params;
-
-
         const trip = await Trip.findById(tripId);
         if (!trip) {
             return res.status(404).json({ success: false, message: 'Không tìm thấy chuyến đi.' });
@@ -132,41 +130,30 @@ const checkInPassenger = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Bạn không có quyền xác nhận hành khách của chuyến đi này.' });
         }
 
-
         const booking = await Booking.findOne({ _id: bookingId, trip: tripId });
         if (!booking) {
             return res.status(404).json({ success: false, message: 'Không tìm thấy booking cho hành khách này.' });
         }
-
         if (booking.paymentMethod === 'OnBoard' && booking.paymentStatus === 'Unpaid') {
             booking.paymentStatus = 'Paid';
-            booking.isCheckedIn = true;
-            await booking.save();
-
-            return res.status(200).json({
-                success: true,
-                message: 'Hành khách đã thanh toán tiền mặt và được xác nhận lên xe thành công.',
-                data: {
-                    bookingId: booking._id,
-                    userId: booking.user,
-                    isCheckedIn: booking.isCheckedIn,
-                    paymentMethod: booking.paymentMethod,
-                    paymentStatus: booking.paymentStatus
-                }
-            });
+            trip.totalAmountCollected = (trip.totalAmountCollected || 0) + booking.price;
+            await trip.save();
         }
         booking.isCheckedIn = true;
         await booking.save();
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
-            message: 'Xác nhận hành khách đã lên xe thành công.',
+            message: booking.paymentStatus === 'Paid'
+                ? 'Hành khách đã thanh toán tiền mặt và được xác nhận lên xe thành công.'
+                : 'Xác nhận hành khách đã lên xe thành công.',
             data: {
                 bookingId: booking._id,
                 userId: booking.user,
                 isCheckedIn: booking.isCheckedIn,
                 paymentMethod: booking.paymentMethod,
-                paymentStatus: booking.paymentStatus
+                paymentStatus: booking.paymentStatus,
+                totalAmountCollected: trip.totalAmountCollected,
             }
         });
     } catch (error) {
@@ -174,6 +161,7 @@ const checkInPassenger = async (req, res) => {
         res.status(500).json({ success: false, message: 'Lỗi khi xác nhận hành khách.', error: error.message });
     }
 };
+
 
 const getCompletedTripCount = async (req, res) => {
     try {
@@ -219,7 +207,7 @@ const reportTripIssue = async (req, res) => {
     }
 };
 
-// Cập nhật thông tin cá nhân của tài xế
+
 const updateDriverInfo = async (req, res) => {
     try {
         const driverId = req.user._id; // ID của tài xế từ token
