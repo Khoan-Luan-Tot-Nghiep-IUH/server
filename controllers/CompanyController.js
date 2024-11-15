@@ -298,7 +298,6 @@ const companyController = {
                 User.findOne({ userName: userName.trim().toLowerCase() }),
                 User.findOne({ email }),
                 User.findOne({ phoneNumber }),
-                Driver.findOne({ licenseNumber })
             ]);
     
             if (existingUser) {

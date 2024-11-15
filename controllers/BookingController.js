@@ -396,49 +396,71 @@ exports.cancelBooking = async (req, res) => {
     try {
         const { id } = req.params;
 
+        // Tìm booking cần hủy
         const booking = await Booking.findById(id).populate('trip').session(session);
         if (!booking) {
-            throw new Error('Booking not found');
+            throw new Error('Booking không tồn tại');
         }
 
+        // Kiểm tra nếu booking đã bị hủy trước đó
         if (booking.status === 'Cancelled') {
-            throw new Error('Booking is already cancelled');
+            throw new Error('Booking đã được hủy trước đó');
         }
 
+        // Kiểm tra nếu booking đã thanh toán
+        if (booking.paymentStatus === 'Paid') {
+            throw new Error('Booking đã được thanh toán và không thể hủy');
+        }
+
+        // Cập nhật trạng thái booking thành "Cancelled"
         booking.status = 'Cancelled';
+        booking.paymentStatus = 'Unpaid';
         await booking.save({ session });
 
+        // Cập nhật trạng thái của tất cả các ghế liên quan về "có sẵn"
         await Seat.updateMany(
             { trip: booking.trip._id, seatNumber: { $in: booking.seatNumbers } },
-            { $set: { isAvailable: true, bookedBy: null } },
+            { $set: { isAvailable: true, bookedBy: null, isLocked: false, lockExpiration: null } },
             { session }
         );
-        const pointsToDeduct = booking.seatNumbers.length * 10;
-        const user = await User.findById(booking.user).session(session);
 
+        // Trừ điểm thưởng của người dùng
+        const pointsToDeduct = booking.seatNumbers.length * 10; // Ví dụ: mỗi ghế trừ 10 điểm
+        const user = await User.findById(booking.user).session(session);
         if (user) {
-            user.loyaltyPoints = Math.max(user.loyaltyPoints - pointsToDeduct, 0);
-            await user.save({ session }); 
+            user.loyaltyPoints = Math.max(user.loyaltyPoints - pointsToDeduct, 0); // Không trừ quá 0
+            await user.save({ session });
         }
 
-
+        // Cam kết thay đổi
         await session.commitTransaction();
         session.endSession();
 
-        const bookedSeatsCount = await Booking.countDocuments({ trip: booking.trip._id, status: 'Confirmed' });
-        req.io.emit('seatCancelled', {
-            tripId: booking.trip._id,
-            seatNumber: booking.seatNumber,
-            availableSeats: booking.trip.totalSeats - bookedSeatsCount
-        });
+        // Emit sự kiện để cập nhật giao diện người dùng qua socket (nếu có)
+        if (req.io && typeof req.io.emit === 'function') {
+            req.io.emit('bookingCancelled', {
+                tripId: booking.trip._id,
+                seatNumbers: booking.seatNumbers,
+                availableSeats: booking.trip.totalSeats - booking.seatNumbers.length
+            });
+        }
 
-        return res.status(200).json({ success: true, message: 'Booking cancelled successfully', data: booking });
+        res.status(200).json({
+            success: true,
+            message: 'Booking đã được hủy thành công',
+            data: booking
+        });
     } catch (error) {
         await session.abortTransaction();
         session.endSession();
-        return res.status(500).json({ success: false, message: 'Failed to cancel booking', error: error.message });
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi khi hủy booking',
+            error: error.message
+        });
     }
 };
+
 exports.cancelSeatInBooking = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -499,7 +521,6 @@ exports.cancelSeatInBooking = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Failed to cancel seat', error: error.message });
     }
 };
-
 exports.getUserBookings = async (req, res) => {
     try {
         const userId = req.user._id;
@@ -509,8 +530,6 @@ exports.getUserBookings = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Failed to get bookings', error: error.message });
     }
 };
-
-
 exports.getBookingById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -523,6 +542,7 @@ exports.getBookingById = async (req, res) => {
         return res.status(500).json({ success: false, message: 'Failed to get booking', error: error.message });
     }
 };
+
 
 //Thống kê cho supperAdmin
 exports.getRevenueStatistics = async (req, res) => {
