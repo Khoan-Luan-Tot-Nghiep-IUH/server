@@ -175,56 +175,45 @@ const createDailyTrips = cron.schedule('0 */12 * * *', async () => {
     console.log('Cron Job: Tạo chuyến đi chạy thử nghiệm mỗi 10 phút lúc:', new Date());
 
     try {
-        // Lấy tất cả các công ty
         const companies = await Company.find({});
         
         for (const company of companies) {
-            // Lấy tất cả loại xe của công ty
             const busTypes = await BusType.find({ companyId: company._id });
             if (busTypes.length === 0) {
                 console.log(`Không có loại xe nào cho công ty ${company._id}`);
                 continue;
             }
-
-            // Lấy tất cả các địa điểm
             const locations = await Location.find({});
             if (locations.length < 2) {
                 console.log('Không đủ địa điểm để tạo chuyến đi');
                 continue;
             }
-
-            // Tạo chuyến đi cho mỗi cặp điểm đi - điểm đến và mỗi loại xe
             for (let i = 0; i < locations.length; i++) {
                 for (let j = 0; j < locations.length; j++) {
-                    if (i === j) continue; // Bỏ qua nếu điểm đi và điểm đến trùng nhau
-
+                    if (i === j) continue; 
                     const departureLocation = locations[i]._id;
                     const arrivalLocation = locations[j]._id;
 
                     for (const busType of busTypes) {
-                        // Thiết lập thời gian khởi hành và thời gian đến
                         const departureTime = moment().tz('Asia/Ho_Chi_Minh').set({ hour: 8, minute: 0 }).toDate();
                         const arrivalTime = moment(departureTime).add(9, 'hours').toDate();
 
-                        // Tạo chuyến đi mới
                         const newTrip = new Trip({
                             departureLocation,
                             arrivalLocation,
                             departureTime,
                             arrivalTime,
                             busType: busType._id,
-                            schedule: [], // Điều chỉnh nếu cần
-                            basePrice: 100000, // Giá vé mẫu, có thể thay đổi
+                            schedule: [],
+                            basePrice: 100000,
                             companyId: company._id,
-                            drivers: [], // Gán danh sách tài xế nếu có
+                            drivers: [],
                             isRoundTrip: false,
                             status: "Scheduled"
                         });
 
                         await newTrip.save();
                         console.log(`Đã tạo chuyến đi cho công ty ${company._id} từ ${locations[i].name} đến ${locations[j].name} với loại xe ${busType.name}`);
-
-                        // Tạo ghế cho chuyến đi
                         const seats = [];
                         const totalSeats = busType.seats;
                         const floors = busType.floorCount || 1; 
@@ -240,14 +229,12 @@ const createDailyTrips = cron.schedule('0 */12 * * *', async () => {
                                     let seatPrice = newTrip.basePrice;
                                     let isAvailable = true;
                                     let isVIP = false;
-
-                                    // Đặt ghế số 1 là không bán, các ghế 2-6 là VIP
                                     if (seatNumber === 1) {
                                         isAvailable = false;
                                     }
                                     if ([2, 3, 4, 5, 6].includes(seatNumber)) {
                                         isVIP = true;
-                                        seatPrice = newTrip.basePrice * 1.5; // Giá ghế VIP cao hơn 50%
+                                        seatPrice = newTrip.basePrice * 1.5;
                                     }
 
                                     seats.push({

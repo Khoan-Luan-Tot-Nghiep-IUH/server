@@ -101,6 +101,7 @@ exports.createTrip = async (req, res) => {
                     
                         if ([2,3,4,,5,6].includes(seatNumber)) {
                             isVIP = true;
+                            seatPrice = basePrice * 1.5;
                         }
 
                         seats.push({

@@ -4,7 +4,6 @@ const DriverSchema = new mongoose.Schema({
     licenseNumber: { 
         type: String,
         required: true,
-        unique: true,
         trim: true
     },
     companyId: { 
@@ -42,6 +41,7 @@ const DriverSchema = new mongoose.Schema({
         default: true
     }
 });
+
 
 const Driver = mongoose.model('Driver', DriverSchema);
 
