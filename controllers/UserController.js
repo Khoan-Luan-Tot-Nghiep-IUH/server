@@ -11,9 +11,11 @@ const Voucher = require('../models/Voucher');
 const SystemSetting = require('../models/SystemSetting'); 
 const { isStrongPassword } = require('validator');
 const PasswordResetCodeModel = require('../models/passwordResetCodeSchema');
+
 const generateVoucherCode = () => {
     return 'VOUCHER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
 };
+
 const createVoucher = async (userId, discount) => {
     const code = generateVoucherCode();
     const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
@@ -60,7 +62,6 @@ const redeemPointsForVoucher = async (req, res) => {
     }
 };
 
-
 const sendResetCode = async (req, res) => {
     const { identifier } = req.body;
 
@@ -88,7 +89,6 @@ const sendResetCode = async (req, res) => {
         res.status(500).json({ success: false, msg: 'Gửi mã thất bại', error: error.message });
     }
 };
-
 const verifyResetCode = async (req, res) => {
     const { identifier, resetCode, newPassword, confirmNewPassword } = req.body;
 
@@ -135,8 +135,7 @@ const verifyResetCode = async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, msg: 'Cập nhật mật khẩu thất bại', error: error.message });
     }
-};
-
+};  
 
 const resetPassword = async (req, res) => {
     try {

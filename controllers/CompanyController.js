@@ -10,6 +10,7 @@ const Booking = require('../models/Booking');
 const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
+const Notification = require('../models/Notification');
 const companyController = {
     createCompany: async (req, res) => {
         try {
@@ -120,7 +121,58 @@ const companyController = {
             return res.status(500).json({ success: false, message: 'Lỗi khi lấy thông tin công ty.', error: error.message });
         }
     },
-
+    getNotifications: async (req, res) => {
+        try {
+            const { page = 1, limit = 10, isRead, search } = req.query;
+    
+            // Kiểm tra và xử lý đầu vào
+            const pageNumber = parseInt(page) || 1;
+            const limitNumber = parseInt(limit) || 10;
+            const filters = {};
+    
+            // Lọc thông báo dựa trên trạng thái isRead
+            if (isRead !== undefined) {
+                filters.isRead = isRead === 'true';
+            }
+    
+            // Lọc thông báo dựa trên nội dung
+            if (search) {
+                filters.content = new RegExp(search, 'i');
+            }
+    
+            // Lấy danh sách thông báo
+            const notifications = await Notification.find(filters)
+                .sort({ timestamp: -1 })
+                .skip((pageNumber - 1) * limitNumber)
+                .limit(limitNumber);
+    
+            // Tổng số thông báo
+            const totalNotifications = await Notification.countDocuments(filters);
+    
+            // Số lượng thông báo chưa đọc (tuỳ chọn)
+            const unreadCount = await Notification.countDocuments({ isRead: false });
+    
+            res.status(200).json({
+                success: true,
+                message: 'Danh sách thông báo đã được lấy thành công.',
+                data: notifications,
+                pagination: {
+                    currentPage: pageNumber,
+                    totalPages: Math.ceil(totalNotifications / limitNumber),
+                    totalNotifications,
+                    limit: limitNumber,
+                },
+                unreadCount, // Số thông báo chưa đọc
+            });
+        } catch (error) {
+            console.error('Lỗi khi lấy danh sách thông báo:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Lỗi khi lấy danh sách thông báo.',
+                error: error.message,
+            });
+        }
+    },
     updateCompany: async (req, res) => {
         try {
             const { companyId } = req.params;
@@ -765,6 +817,7 @@ const companyController = {
             res.status(500).json({ success: false, message: 'Lỗi khi xuất dữ liệu doanh thu ra Excel.', error: error.message });
         }
     },
+
     getTopBookingUsers: async (req, res) => {
         try {
             const companyId = req.user.companyId;
@@ -798,7 +851,7 @@ const companyController = {
                         totalRevenue: { $sum: '$totalPrice' }
                     }
                 },
-                { $sort: { totalBookings: -1 } },
+                { $sort: { totalRevenue: -1 } }, // Sắp xếp theo tổng doanh thu
                 { $limit: 10 }
             ]);
             const populatedTopUsers = await User.populate(topUsers, {
@@ -808,7 +861,7 @@ const companyController = {
     
             return res.status(200).json({
                 success: true,
-                message: 'Top 10 người đặt vé nhiều nhất cho công ty đã được lấy thành công.',
+                message: 'Top 10 người đặt vé nhiều nhất theo doanh thu đã được lấy thành công.',
                 data: populatedTopUsers
             });
         } catch (error) {
@@ -900,6 +953,91 @@ const companyController = {
             return res.status(500).json({ success: false, message: 'Lỗi khi lấy top người đặt vé theo thời gian.', error: error.message });
         }
     },  
+     getBookingsByCompany : async (req, res) => {
+        try {
+            const companyId = req.user.companyId;
+    
+            if (!companyId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Yêu cầu phải có mã công ty hợp lệ.',
+                });
+            }
+    
+            const { startDate, endDate, status } = req.query;
+
+            const matchConditions = {
+                'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
+            };
+    
+            if (startDate && endDate) {
+                matchConditions.bookingDate = {
+                    $gte: new Date(startDate),
+                    $lte: new Date(endDate),
+                };
+            }
+    
+            if (status) {
+                matchConditions.status = status;
+            }
+            const bookings = await Booking.aggregate([
+                {
+                    $lookup: {
+                        from: 'trips',
+                        localField: 'trip',
+                        foreignField: '_id',
+                        as: 'tripDetails',
+                    },
+                },
+                { $unwind: '$tripDetails' },
+                {
+                    $match: matchConditions,
+                },
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: 'user',
+                        foreignField: '_id',
+                        as: 'userDetails',
+                    },
+                },
+                { $unwind: '$userDetails' },
+                {
+                    $project: {
+                        _id: 1,
+                        user: {
+                            fullName: '$userDetails.fullName',
+                            email: '$userDetails.email',
+                            phoneNumber: '$userDetails.phoneNumber',
+                        },
+                        trip: {
+                            _id: '$tripDetails._id',
+                            departureLocation: '$tripDetails.departureLocation',
+                            arrivalLocation: '$tripDetails.arrivalLocation',
+                            departureTime: '$tripDetails.departureTime',
+                        },
+                        bookingDate: 1,
+                        totalPrice: 1,
+                        status: 1,
+                        paymentStatus: 1,
+                    },
+                },
+                { $sort: { bookingDate: -1 } },
+            ]);
+            return res.status(200).json({
+                success: true,
+                message: 'Danh sách đặt vé của công ty đã được lấy thành công.',
+                data: bookings,
+            });
+        } catch (error) {
+            console.error('Lỗi khi lấy danh sách đặt vé của công ty:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Lỗi khi lấy danh sách đặt vé của công ty.',
+                error: error.message,
+            });
+        }
+    },
 };
 
 module.exports = companyController;

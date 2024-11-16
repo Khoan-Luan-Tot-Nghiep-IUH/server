@@ -181,8 +181,7 @@ exports.createBooking = async (req, res) => {
       if (!bookingDraft) {
         throw new Error('Đặt vé đã hết hạn hoặc không tồn tại');
       }
-  
-      // Tìm voucher nếu voucherCode được cung cấp
+
       let discountAmount = 0;
       if (voucherCode) {
         const voucher = await Voucher.findOne({ code: voucherCode, userId, isUsed: false });
@@ -204,17 +203,12 @@ exports.createBooking = async (req, res) => {
         lockedBy: userId,
       }).session(session);
   
-      if (seats.length !== bookingDraft.seatNumbers.length) {
-        throw new Error('Một số ghế đã không còn khả dụng');
-      }
-  
       bookingDraft.paymentMethod = paymentMethod;
       bookingDraft.status = paymentMethod === 'Online' ? 'Pending' : 'Confirmed';
       if (!bookingDraft.orderCode) {
         bookingDraft.orderCode = generateOrderCode(bookingDraft._id);
       }
-  
-      // Tính tổng giá trị sau khi áp dụng voucher và làm tròn
+
       const discountedTotal = Math.round(bookingDraft.totalPrice - (bookingDraft.totalPrice * (discountAmount / 100)));
       bookingDraft.totalPrice = discountedTotal;
   
