@@ -327,7 +327,8 @@ const userLogin = async (req, res) => {
             roleId: user.roleId,
             address: user.address,
             birthDay: user.birthDay,
-            companyId: user.companyId 
+            companyId: user.companyId,
+            loyaltyPoints: user.loyaltyPoints
         });
 
         user.lastLogin = moment().tz("Asia/Ho_Chi_Minh").toDate();
