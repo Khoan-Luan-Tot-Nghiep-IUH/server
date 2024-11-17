@@ -170,10 +170,22 @@ exports.getBusTypeNames = async (req, res) => {
 
 exports.getAllBusType = async (req, res) => {
   try {
-    const busTypeNames = await BusType.find().select('name floorCount seats -_id images description companyId');
-    res.status(200).json({ success: true, data: busTypeNames });
+    const busTypes = await BusType.find()
+      .select('name floorCount seats -_id images description companyId')
+      .populate({
+        path: 'companyId',
+        select: 'name -_id',
+      });
+    const data = busTypes.map(busType => ({
+      ...busType._doc,
+      companyName: busType.companyId?.name || null, 
+      companyId: undefined,
+    }));
+
+    res.status(200).json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Failed to get bus type names', error: err.message });
   }
 };
+
 
