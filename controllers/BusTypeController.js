@@ -170,7 +170,7 @@ exports.getBusTypeNames = async (req, res) => {
 
 exports.getAllBusType = async (req, res) => {
   try {
-    const busTypeNames = await BusType.find().select('name floorCount seats -_id images description');
+    const busTypeNames = await BusType.find().select('name floorCount seats -_id images description companyId');
     res.status(200).json({ success: true, data: busTypeNames });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Failed to get bus type names', error: err.message });
