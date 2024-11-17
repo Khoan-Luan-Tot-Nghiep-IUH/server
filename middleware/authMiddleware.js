@@ -25,17 +25,11 @@ const authMiddleware = {
             if (!token) {
                 return res.status(401).json({ success: false, message: 'Không tìm thấy token xác thực' });
             }
-    
-            // Giải mã token
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-            // Tìm người dùng và kiểm tra token hiện tại
             const user = await User.findById(decoded.id).select('-password');
             if (!user) {
                 return res.status(401).json({ success: false, message: 'Token không hợp lệ hoặc người dùng không tồn tại' });
             }
-    
-            // Kiểm tra token hiện tại trong cơ sở dữ liệu
             if (user.currentToken !== token) {
                 return res.status(401).json({
                     success: false,

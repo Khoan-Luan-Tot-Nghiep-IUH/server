@@ -7,7 +7,7 @@ const { facebookLogin, facebookCallback } = require('../controllers/facebookAuth
 const passport = require('passport');
 const User = require('../models/User');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-
+const userV2Controller= require('../controllers/userV2Controller');
 
 const googleStrategyOptions = {
   clientID: process.env.GOOGLE_CLIENT_ID,
@@ -67,6 +67,9 @@ router.get('/facebook/callback', facebookCallback);
 router.post('/register', userController.userRegister);
 router.post('/verify', userController.confirmRegistration);
 router.post('/login', userController.userLogin);
+
+router.get('/companies/names', userV2Controller.getCompanyNames);
+router.get('/bustypes/:companyId',userV2Controller.getBusTypesByCompany);
 
 //gửi mã trước 
 router.post('/forgot-password', userController.sendResetCode);

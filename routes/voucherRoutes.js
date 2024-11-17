@@ -11,4 +11,9 @@ router.get('/user-vouchers',authMiddleware.verifyToken,voucherController.getAllV
 router.get('/:id', voucherController.getVoucherById);
 router.delete('/:id', voucherController.deleteVoucher);
 
+
+
+
+
+
 module.exports = router;

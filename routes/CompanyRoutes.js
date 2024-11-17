@@ -20,6 +20,7 @@ router.get('/completed-trips-by-month', authMiddleware.verifyToken,authMiddlewar
 router.get('/revenue-by-payment-method', authMiddleware.verifyToken,authMiddleware.checkCompanyAccess ,companyController.getRevenueByPaymentMethod);
 router.get('/revenue-by-time', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.getRevenueByTimeRange);
 router.patch('/employees/:userId/disable',authMiddleware.verifyToken,authMiddleware.isCompanyAdmin, companyController.toggleDriverStatus);
+
 router.get('/notifications', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.getNotifications);
 
 // Route mới: Lấy danh sách đặt vé của công ty
