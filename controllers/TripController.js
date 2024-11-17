@@ -448,7 +448,7 @@ exports.searchTrips = async (req, res) => {
         
 
         let departureTrips = await Trip.find(filter)
-            .populate('departureLocation arrivalLocation busType')
+            .populate('departureLocation arrivalLocation busType companyId')
             .exec();
         const tripIds = departureTrips.map(trip => trip._id);
         const seatCounts = await Seat.aggregate([
@@ -489,7 +489,7 @@ exports.searchTrips = async (req, res) => {
                 },
                 status: { $ne: "Completed" },
             })
-            .populate('departureLocation arrivalLocation busType')
+            .populate('departureLocation arrivalLocation busType companyId')
             .exec();
             const returnTripSeatCounts = await Seat.aggregate([
                 { $match: { trip: { $in: returnTripIds }, isAvailable: true } },
