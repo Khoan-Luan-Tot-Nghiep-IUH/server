@@ -71,6 +71,13 @@ router.post('/login', userController.userLogin);
 router.get('/companies/names', userV2Controller.getCompanyNames);
 router.get('/bustypes/:companyId',userV2Controller.getBusTypesByCompany);
 
+// yêu cầu của người dùng đến superadmin để mở & lấy & xóa
+router.post('/companies/request',authMiddleware.verifyToken,userV2Controller.createCompanyRequest);
+router.get('/companies/request',authMiddleware.verifyToken,userV2Controller.getUserRequests);
+router.delete('/companies/cancel',authMiddleware.verifyToken,userV2Controller.cancelUserRequest);
+
+
+
 //gửi mã trước 
 router.post('/forgot-password', userController.sendResetCode);
 //xác nhận mã và nhập passmoi
@@ -102,5 +109,6 @@ router.get('/superadmin', (req, res) => {
   res.status(200).json({ message: 'Access granted to superadmin route' });
 });
 router.get('/getLastLoginUser',authMiddleware.verifyToken,authMiddleware.isSuperAdmin,userController.getAllUsersByLastLogin);
-
+router.get('/requests', authMiddleware.verifyToken,authMiddleware.isSuperAdmin, userV2Controller.getCompanyRequests);
+router.patch('/requests/update', authMiddleware.verifyToken,authMiddleware.isSuperAdmin, userV2Controller.updateCompanyRequest);
 module.exports = router;
