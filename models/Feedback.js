@@ -15,7 +15,7 @@ const FeedbackSchema = new mongoose.Schema({
         type: Number,
         required: true,
         min: 1,
-        max: 5 // Thang điểm từ 1 đến 5
+        max: 5 
     },
     comment: {
         type: String,

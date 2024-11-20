@@ -110,7 +110,6 @@ exports.createCompanyRequest = async (req, res) => {
         });
     }
 };
-
 exports.getUserRequests = async (req, res) => {
     try {
         const userRequests = await CompanyRequest.find({ userId: req.user._id })

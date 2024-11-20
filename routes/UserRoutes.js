@@ -84,16 +84,13 @@ router.post('/forgot-password', userController.sendResetCode);
 router.post('/verify-reset-code', userController.verifyResetCode);
 
 
-// Protected routes (User must be authenticated)
 router.use(authMiddleware.verifyToken);
 
-// User-specific routes (Authenticated users)
 router.get('/profile/:userId',authMiddleware.verifyToken, authMiddleware.isUser, userController.getUserDetails);
 router.put('/profile/:userId',authMiddleware.verifyToken, userController.updateUser);
 router.put('/change-password', authMiddleware.isUser, userController.changePassword);
 router.post('/redeem-points', authMiddleware.verifyToken,authMiddleware.isUser,userController.redeemPointsForVoucher);
 
-// Routes accessible by company admin or superadmin
 router.use(authMiddleware.isCompanyAdmin);
 
 router.get('/all', userController.getAllUsers);
