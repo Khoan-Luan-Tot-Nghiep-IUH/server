@@ -46,12 +46,6 @@ const CompanyRequestSchema = new mongoose.Schema({
     website: {
         type: String,
         trim: true,
-        validate: {
-            validator: function (v) {
-                return !v || /^(http|https):\/\/[^ "]+$/.test(v);
-            },
-            message: props => `${props.value} không phải là website hợp lệ!`
-        }
     },
     status: {
         type: String,

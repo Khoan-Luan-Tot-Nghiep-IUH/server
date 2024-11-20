@@ -197,7 +197,6 @@ const companyController = {
             return res.status(500).json({ success: false, message: 'Lỗi khi cập nhật công ty.', error: error.message });
         }
     },
-
     toggleCompanyStatus: async (req, res) => {
         try {
             const { companyId } = req.params;

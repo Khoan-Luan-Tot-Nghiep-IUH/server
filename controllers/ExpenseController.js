@@ -79,7 +79,6 @@ exports.getDriverExpenses = async (req, res) => {
     }
 };
 
-
 exports.getCompanyExpenses = async (req, res) => {
     try {
         const companyId = req.user.companyId;
