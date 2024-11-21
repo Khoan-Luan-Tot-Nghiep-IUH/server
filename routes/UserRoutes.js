@@ -128,13 +128,10 @@ router.get('/facebook/callback',
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
-
-      // Lưu token vào database (optional)
       await User.findByIdAndUpdate(req.user._id, { currentToken: token });
-
-      // Redirect về frontend với token
-      res.json({ token, user: req.user });
+      res.redirect(`${process.env.CLIENT_URL}/login?token=${token}`);
     } catch (error) {
+      res.redirect('/login');
       console.error('Error in Facebook callback:', error);
       res.status(500).json({ message: 'Facebook login failed', error: error.message });
     }
