@@ -58,6 +58,25 @@ exports.getBusTypesByCompany = async (req, res) => {
     }
 };
 
+exports.getCompanyDetails = async (req, res) => {
+    const { companyId } = req.params;
+    try {
+      const company = await Company.findById(companyId);
+  
+      if (!company) {
+        return res.status(404).json({ success: false, message: 'Công ty không tồn tại' });
+      }
+  
+      res.status(200).json({
+        success: true,
+        data: company,
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Lỗi hệ thống', error: error.message });
+    }
+};
+  
+
 // người dùng gửi && lấy yêu cầu && hủy yêu cầu
 exports.createCompanyRequest = async (req, res) => {
     try {

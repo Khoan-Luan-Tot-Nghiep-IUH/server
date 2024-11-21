@@ -70,6 +70,7 @@ router.post('/login', userController.userLogin);
 
 router.get('/companies/names', userV2Controller.getCompanyNames);
 router.get('/bustypes/:companyId',userV2Controller.getBusTypesByCompany);
+router.get('/companies/:companyId/details',userV2Controller.getCompanyDetails);
 
 // yêu cầu của người dùng đến superadmin để mở & lấy & xóa
 router.post('/companies/request',authMiddleware.verifyToken,userV2Controller.createCompanyRequest);
