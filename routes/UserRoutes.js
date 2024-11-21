@@ -78,7 +78,7 @@ passport.use(new FacebookStrategy({
   clientID: process.env.FACEBOOK_APP_ID,
   clientSecret: process.env.FACEBOOK_APP_SECRET,
   callbackURL: process.env.NODE_ENV === 'production'
-    ? 'https://your-production-domain.com/api/user/facebook/callback'
+    ? 'https://server-zeym.onrender.com/api/user/facebook/callback'
     : 'http://localhost:5000/api/user/facebook/callback',
   profileFields: ['id', 'emails', 'name'] 
 }, async (accessToken, refreshToken, profile, done) => {
