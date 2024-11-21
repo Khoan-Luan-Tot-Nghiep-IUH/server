@@ -145,15 +145,15 @@ router.post('/verify', userController.confirmRegistration);
 router.post('/login', userController.userLogin);
 
 router.get('/companies/names', userV2Controller.getCompanyNames);
+
 router.get('/bustypes/:companyId',userV2Controller.getBusTypesByCompany);
+
 router.get('/companies/:companyId/details',userV2Controller.getCompanyDetails);
 
 // yêu cầu của người dùng đến superadmin để mở & lấy & xóa
 router.post('/companies/request',authMiddleware.verifyToken,userV2Controller.createCompanyRequest);
 router.get('/companies/request',authMiddleware.verifyToken,userV2Controller.getUserRequests);
 router.delete('/companies/cancel',authMiddleware.verifyToken,userV2Controller.cancelUserRequest);
-
-
 
 //gửi mã trước 
 router.post('/forgot-password', userController.sendResetCode);
