@@ -52,31 +52,39 @@ router.get('/google',
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
 
-router.get('/google/callback', 
-  passport.authenticate('google', { session: false, failureRedirect: '/login' }),
-  async (req, res) => {
-    try {
-      if (!req.user || !req.user.email) {
-        throw new Error('User or email not found in request');
-      }
-
-      let userName = req.user.userName || generateUserName(req.user.email);
-
-      const token = jwt.sign(
-        { id: req.user._id, email: req.user.email, fullName: req.user.fullName, userName },
-        process.env.JWT_SECRET,
-        { expiresIn: '24h' }
-      );
-
-      await User.findByIdAndUpdate(req.user._id, { currentToken: token });
-
-      res.redirect(`${process.env.CLIENT_URL}/login?token=${token}`);
-    } catch (error) {
-      console.error('Error in Google callback:', error);
-      res.status(500).json({ message: 'Google login failed', error: error.message });
+router.get('/google/callback', (req, res, next) => {
+  passport.authenticate('google', { session: false }, async (err, user, info) => {
+    if (err) {
+      console.error('Error in Google authentication:', err);
+      return res.status(500).json({ message: 'Authentication failed', error: err.message });
     }
+    if (!user) {
+      console.error('No user returned from Google');
+      return res.redirect('/login?error=authentication_failed');
+    }
+
+    req.user = user;
+    next();
+  })(req, res, next);
+}, async (req, res) => {
+  try {
+    let userName = req.user.userName || generateUserName(req.user.email);
+
+    const token = jwt.sign(
+      { id: req.user._id, email: req.user.email, fullName: req.user.fullName, userName },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    await User.findByIdAndUpdate(req.user._id, { currentToken: token });
+
+    res.redirect(`${process.env.CLIENT_URL}/login?token=${token}`);
+  } catch (error) {
+    console.error('Error in Google callback:', error);
+    res.status(500).json({ message: 'Google login failed', error: error.message });
   }
-);
+});
+
 
 
 
