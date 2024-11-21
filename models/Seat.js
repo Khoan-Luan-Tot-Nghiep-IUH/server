@@ -36,11 +36,23 @@ const SeatSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
     },
-    reservedAt: Date
+    reservedAt: Date,
+    isLocked: {
+        type: Boolean,
+        default: false // Trạng thái ghế có bị tạm giữ không
+    },
+    lockedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    },
+    version: { type: Number, default: 0 },
+    lockExpiration: Date
 });
 
 SeatSchema.index({ trip: 1, seatNumber: 1 }, { unique: true });
-
+SeatSchema.index({ isLocked: 1, lockExpiration: 1 });
 const Seat = mongoose.model('Seat', SeatSchema);
 module.exports = Seat;
+
 

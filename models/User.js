@@ -43,7 +43,7 @@ const UserSchema = new mongoose.Schema({
     },
     roleId: {
         type: String,
-        enum: ['superadmin', 'companyadmin', 'staff', 'user'],
+        enum: ['superadmin', 'companyadmin', 'staff', 'user','driver'],
         default: 'user',
         required: true
     },
@@ -53,6 +53,12 @@ const UserSchema = new mongoose.Schema({
         required: function() {
             return this.roleId !== 'superadmin' && this.roleId !== 'user';
         }
+    },
+    driverId: { 
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Driver',
+        required: false,
+        
     },
     address: {
         type: String,
@@ -82,6 +88,7 @@ const UserSchema = new mongoose.Schema({
         default: 0,
         min: 0
     },
+    vouchers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Voucher' }],
     isActive: {
         type: Boolean,
         default: true
@@ -90,7 +97,8 @@ const UserSchema = new mongoose.Schema({
     bookings: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Booking'
-    }]
+    }],
+    currentToken: { type: String, default: null },
 }, {
     validateBeforeSave: true,
     timestamps: true
@@ -105,6 +113,14 @@ UserSchema.methods.getFullName = function() {
 UserSchema.statics.findByUserName = function(userName) {
     return this.findOne({ userName: userName });
 };
+
+UserSchema.pre('save', async function (next) {
+    if (!this.userName && (this.googleId || this.facebookId)) {
+      this.userName = this.email ? this.email.split('@')[0] + Math.floor(Math.random() * 10000) : `user_${Math.floor(Math.random() * 10000)}`;
+    }
+  
+    next();
+  });
 
 const User = mongoose.model('User', UserSchema);
 

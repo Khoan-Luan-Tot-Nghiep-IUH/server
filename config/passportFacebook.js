@@ -1,6 +1,6 @@
 const passport = require('passport');
 const FacebookStrategy = require('passport-facebook').Strategy;
-const User = require('../models/User'); 
+const User = require('../models/User');
 
 // Cấu hình Passport với Facebook Strategy
 passport.use(new FacebookStrategy({
@@ -10,14 +10,24 @@ passport.use(new FacebookStrategy({
     profileFields: ['id', 'displayName', 'emails', 'name']
 },
 async (accessToken, refreshToken, profile, done) => {
-    const { id, name, email } = profile._json;
     try {
-        let user = await User.findOne({ facebookId: id });
+        // Lấy email từ profile.emails nếu tồn tại
+        const email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
+        const fullName = `${profile.name.givenName || ''} ${profile.name.familyName || ''}`.trim();
+        
+        // Tìm user dựa trên facebookId
+        let user = await User.findOne({ facebookId: profile.id });
 
+        // Nếu user chưa tồn tại, tạo user mới
         if (!user) {
+            if (!email) {
+                // Nếu không có email, trả lỗi để xử lý sau
+                return done(null, false, { message: 'Không tìm thấy email trong tài khoản Facebook' });
+            }
+            
             user = await User.create({
-                facebookId: id,
-                fullName: name,
+                facebookId: profile.id,
+                fullName: fullName,
                 email: email
             });
         }

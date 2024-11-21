@@ -1,39 +1,141 @@
 const User = require('../models/User');
 const argon2 = require('argon2');
-const { generalAcesstoken, generateAccessToken } = require('../middleware/authMiddleware');
+const {generateAccessToken } = require('../middleware/authMiddleware');
 const crypto = require('crypto');
-const { sendOrderConfirmationEmail } = require('../config/mailer');
+const { sendOrderConfirmationEmail, sendVerificationEmail, verifyCodeEmail, sendPasswordResetEmail, verifyPasswordResetCode } = require('../config/mailer');
 const moment = require('moment-timezone');
 const { validationResult } = require('express-validator');
 const {sendVerificationCode, verifyCode } = require('../config/twilioConfig');
 const TempUser = require('../models/TempUser');
+const Voucher = require('../models/Voucher'); 
+const SystemSetting = require('../models/SystemSetting'); 
+const { isStrongPassword } = require('validator');
+const PasswordResetCodeModel = require('../models/passwordResetCodeSchema');
 
+const generateVoucherCode = () => {
+    return 'VOUCHER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+};
 
-const sendResetPasswordEmail = async (req, res) => {
+const createVoucher = async (userId, discount) => {
+    const code = generateVoucherCode();
+    const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); 
+
+    const voucher = new Voucher({
+        code,
+        userId,
+        discount,
+        expiryDate,
+        isUsed: false
+    });
+
+    await voucher.save();
+    return voucher;
+};
+const redeemPointsForVoucher = async (req, res) => {
+    const userId = req.body.userId; 
+    const pointsToRedeem = req.body.pointsToRedeem; 
+
     try {
-        const { email } = req.body;
-        const user = await User.findOne({ email });
+        // Lấy thông tin người dùng
+        const user = await User.findById(userId);
         if (!user) {
-            return res.status(404).json({ success: false, msg: 'Email không tồn tại' });
+            return res.status(404).json({ success: false, message: 'Người dùng không tồn tại' });
         }
-        const resetToken = crypto.randomBytes(32).toString('hex');
-        const resetTokenExpiry = Date.now() + 3600000;
-        user.resetToken = resetToken;
-        user.resetTokenExpiry = resetTokenExpiry;
+
+        if (user.loyaltyPoints < pointsToRedeem) {
+            return res.status(400).json({ success: false, message: 'Điểm tích lũy không đủ để đổi' });
+        }
+        const discount = pointsToRedeem / 10; 
+
+        user.loyaltyPoints -= pointsToRedeem;
         await user.save();
-        const htmlContent = `
-            <h3>Đặt lại mật khẩu</h3>
-            <p>Nhấp vào liên kết bên dưới để đặt lại mật khẩu của bạn:</p>
-            <a href="${process.env.BASE_URL}/reset-password/${resetToken}">Đặt lại mật khẩu</a>
-        `;
-        await sendOrderConfirmationEmail(user.email, 'Đặt lại mật khẩu của bạn', htmlContent);
 
-        res.status(200).json({ success: true, msg: 'Email reset mật khẩu đã được gửi' });
-
+        const voucher = await createVoucher(userId, discount);
+        res.status(200).json({
+            success: true,
+            message: `Bạn đã đổi thành công ${pointsToRedeem} điểm để nhận mã giảm giá.`,
+            voucher: voucher
+        });
     } catch (error) {
-        res.status(500).json({ success: false, msg: 'Gửi email thất bại', error: error.message });
+        console.error('Lỗi khi đổi điểm:', error);
+        res.status(500).json({ success: false, message: 'Lỗi hệ thống. Vui lòng thử lại sau.' });
     }
 };
+
+const sendResetCode = async (req, res) => {
+    const { identifier } = req.body;
+
+    try {
+        const user = identifier.includes('@') 
+            ? await User.findOne({ email: identifier }) 
+            : await User.findOne({ phoneNumber: identifier });
+
+        if (!user) {
+            return res.status(404).json({ success: false, msg: 'Người dùng không tồn tại' });
+        }
+
+        if (identifier.includes('@')) {
+            const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+            await sendPasswordResetEmail(identifier, resetCode);
+        } else {
+            const status = await sendVerificationCode(identifier);
+            if (status !== 'pending') {
+                return res.status(500).json({ success: false, msg: 'Gửi mã xác minh qua SMS thất bại' });
+            }
+        }
+
+        res.status(200).json({ success: true, msg: 'Mã xác minh đã được gửi' });
+    } catch (error) {
+        res.status(500).json({ success: false, msg: 'Gửi mã thất bại', error: error.message });
+    }
+};
+const verifyResetCode = async (req, res) => {
+    const { identifier, resetCode, newPassword, confirmNewPassword } = req.body;
+
+    try {
+        let isValidCode = false;
+
+        if (identifier.includes('@')) {
+            // Kiểm tra mã trong cơ sở dữ liệu cho email
+            const record = await PasswordResetCodeModel.findOne({
+                identifier,
+                code: resetCode,
+                expiry: { $gt: Date.now() }
+            });
+
+            isValidCode = !!record;
+        } else {
+            // Kiểm tra mã qua Twilio Verify Service cho số điện thoại
+            const status = await verifyCode(identifier, resetCode);
+            isValidCode = (status === 'approved');
+        }
+
+        if (!isValidCode) {
+            return res.status(400).json({ success: false, msg: 'Mã xác nhận không chính xác hoặc đã hết hạn' });
+        }
+
+        if (newPassword !== confirmNewPassword) {
+            return res.status(400).json({ success: false, msg: 'Mật khẩu mới và xác nhận mật khẩu không khớp' });
+        }
+
+        const hashPass = await argon2.hash(newPassword);
+        const user = identifier.includes('@')
+            ? await User.findOneAndUpdate({ email: identifier }, { password: hashPass })
+            : await User.findOneAndUpdate({ phoneNumber: identifier }, { password: hashPass });
+
+        if (!user) {
+            return res.status(404).json({ success: false, msg: 'Không tìm thấy người dùng' });
+        }
+
+        if (identifier.includes('@')) {
+            await PasswordResetCodeModel.deleteOne({ identifier, code: resetCode });
+        }
+
+        res.status(200).json({ success: true, msg: 'Mật khẩu đã được cập nhật' });
+    } catch (error) {
+        res.status(500).json({ success: false, msg: 'Cập nhật mật khẩu thất bại', error: error.message });
+    }
+};  
 
 const resetPassword = async (req, res) => {
     try {
@@ -70,8 +172,8 @@ const userRegister = async (req, res) => {
     }
 
     try {
-        const { email, userName, password, roleId, fullName, phoneNumber, address, birthDay}= req.body;
-
+        const { email, userName, password, roleId, fullName, phoneNumber, address, birthDay, verificationMethod } = req.body;
+        console.log('Bắt đầu xử lý yêu cầu đăng ký với dữ liệu:', req.body);
         if (roleId === 'admin' || roleId === 'superadmin') {
             return res.status(403).json({ success: false, msg: 'Bạn không thể tự đăng ký với vai trò này' });
         }
@@ -81,17 +183,31 @@ const userRegister = async (req, res) => {
             return res.status(400).json({ success: false, msg: 'Email đã được sử dụng' });
         }
 
-
         const existingUserByUserName = await TempUser.findOne({ userName });
         if (existingUserByUserName) {
             return res.status(400).json({ success: false, msg: 'Tên người dùng đã được sử dụng' });
         }
+        
+        const existingUserByPhoneNumber = await TempUser.findOne({ phoneNumber });
+        if (existingUserByPhoneNumber) {
+            return res.status(400).json({ success: false, msg: 'Số điện thoại đã được sử dụng' });
+        }
 
-        const status = await sendVerificationCode(phoneNumber);
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+        let status;
+        if (verificationMethod === 'phone') {
+            status = await sendVerificationCode(phoneNumber, verificationCode);
+        } else if (verificationMethod === 'email') {
+            status = await sendVerificationEmail(email, verificationCode);
+        } else {
+            return res.status(400).json({ success: false, msg: 'Phương thức xác nhận không hợp lệ' });
+        }
 
         if (status !== 'pending') {
             return res.status(500).json({ success: false, msg: 'Gửi mã xác nhận thất bại' });
         }
+
         const tempUser = new TempUser({
             userName,
             fullName,
@@ -102,26 +218,58 @@ const userRegister = async (req, res) => {
             birthDay
         });
         await tempUser.save();
+        const setting = await SystemSetting.findOne();
+        if (setting && setting.allowNewUserVoucher) {
+            const voucher = new Voucher({
+                code: generateVoucherCode(),
+                userId: tempUser._id,
+                discount: 50,
+                expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                isUsed: false,
+                type: 'personal'
+            });
+            await voucher.save();
+
+            tempUser.vouchers = [voucher._id];
+            await tempUser.save();
+        }
         res.status(201).json({ success: true, msg: 'Mã xác nhận đã được gửi. Vui lòng nhập mã để hoàn tất đăng ký.' });
 
     } catch (error) {
+        console.error('Có lỗi xảy ra:', error); 
         res.status(500).json({ success: false, msg: 'Đăng ký thất bại', error: error.message });
     }
 };
 
 const confirmRegistration = async (req, res) => {
-    const { phoneNumber, verificationCode } = req.body;
+    const { verificationMethod, phoneNumber, email, verificationCode } = req.body;
 
     try {
-        const status = await verifyCode(phoneNumber, verificationCode);
+        let status;
+        if (verificationMethod === 'phone') {
+            // Xác minh bằng số điện thoại
+            status = await verifyCode(phoneNumber, verificationCode);
+        } else if (verificationMethod === 'email') {
+            // Xác minh bằng email
+            status = await verifyCodeEmail(email, verificationCode);
+        } else {
+            return res.status(400).json({ success: false, msg: 'Phương thức xác nhận không hợp lệ' });
+        }
+
         if (status !== 'approved') {
             return res.status(400).json({ success: false, msg: 'Mã xác nhận không chính xác hoặc đã hết hạn' });
         }
-        const tempUser = await TempUser.findOne({ phoneNumber });
+
+        // Tìm người dùng tạm dựa trên phương thức xác minh
+        const tempUser = verificationMethod === 'phone'
+            ? await TempUser.findOne({ phoneNumber })
+            : await TempUser.findOne({ email });
+
         if (!tempUser) {
-            return res.status(400).json({ success: false, msg: 'Số điện thoại không tồn tại' });
+            return res.status(400).json({ success: false, msg: `${verificationMethod === 'phone' ? 'Số điện thoại' : 'Email'} không tồn tại` });
         }
 
+        // Tiến hành lưu người dùng chính thức
         const newUser = new User({
             userName: tempUser.userName,
             fullName: tempUser.fullName,
@@ -134,14 +282,14 @@ const confirmRegistration = async (req, res) => {
         });
 
         await newUser.save();
-        await TempUser.deleteOne({ phoneNumber });
+        await TempUser.deleteOne({ _id: tempUser._id }); // Xóa người dùng tạm dựa trên `_id`
 
-        res.status(201).json({ success: true, msg: 'Đăng ký thành công' ,newUser });
+        res.status(201).json({ success: true, msg: 'Đăng ký thành công', newUser });
     } catch (error) {
+        console.error('Xác nhận đăng ký thất bại:', error);
         res.status(500).json({ success: false, msg: 'Xác nhận đăng ký thất bại', error: error.message });
     }
 };
-
 
 const userLogin = async (req, res) => {
     const { userName, password } = req.body;
@@ -153,6 +301,13 @@ const userLogin = async (req, res) => {
                 success: false,
                 msg: 'Tên người dùng không tồn tại. Vui lòng kiểm tra lại tên đăng nhập của bạn.',
                 errorType: 'user_not_found'
+            });
+        }
+        if (!user.isActive) {
+            return res.status(403).json({
+                success: false,
+                msg: 'Tài khoản hiện tại không còn hoạt động.',
+                errorType: 'account_inactive'
             });
         }
         const validPassword = await argon2.verify(user.password, password);
@@ -172,12 +327,14 @@ const userLogin = async (req, res) => {
             roleId: user.roleId,
             address: user.address,
             birthDay: user.birthDay,
-            companyId: user.companyId 
+            companyId: user.companyId,
+            loyaltyPoints: user.loyaltyPoints
         });
 
         user.lastLogin = moment().tz("Asia/Ho_Chi_Minh").toDate();
+        user.currentToken = accessToken;
         await user.save();
-
+        
         res.cookie('access_token', accessToken, {
             httpOnly: true,
             sameSite: 'Strict',
@@ -217,50 +374,59 @@ const getUserDetails = async (req, res) => {
 
 const changePassword = async (req, res) => {
     try {
-        const userId = req.params.userId;
+        const userId = req.user.id; 
         const { currentPassword, newPassword, confirmNewPassword } = req.body;
-
         const user = await User.findById(userId);
         if (!user) {
-            return res.status(404).json({ msg: 'Không tìm thấy người dùng' });
+            return res.status(404).json({ success: false, msg: 'Không tìm thấy người dùng' });
         }
-
         const isPasswordValid = await argon2.verify(user.password, currentPassword);
         if (!isPasswordValid) {
-            return res.status(401).json({ msg: 'Mật khẩu hiện tại không đúng' });
+            return res.status(401).json({ success: false, msg: 'Mật khẩu hiện tại không đúng' });
         }
-
         if (newPassword !== confirmNewPassword) {
-            return res.status(400).json({ msg: 'Mật khẩu mới và xác nhận mật khẩu không khớp' });
+            return res.status(400).json({ success: false, msg: 'Mật khẩu mới và xác nhận mật khẩu không khớp' });
         }
-
+        if (!isStrongPassword(newPassword, { minLength: 8, minSymbols: 1, minNumbers: 1, minUppercase: 1 })) {
+            return res.status(400).json({ 
+                success: false, 
+                msg: 'Mật khẩu mới phải có ít nhất 8 ký tự, bao gồm ký tự viết hoa, ký tự đặc biệt và số.' 
+            });
+        }
         const hashPass = await argon2.hash(newPassword);
-
         await User.findByIdAndUpdate(userId, { password: hashPass }, { new: true });
 
-        return res.status(200).json({ msg: 'Cập nhật mật khẩu thành công' });
+        return res.status(200).json({ success: true, msg: 'Cập nhật mật khẩu thành công' });
     } catch (error) {
-        return res.status(500).json({ error: 'Lỗi server', details: error.message });
+        return res.status(500).json({ success: false, msg: 'Lỗi server', details: error.message });
     }
 };
 
 const updateUser = async (req, res) => {
     try {
         const userId = req.params.userId;
-        const { fullName, phoneNumber, email, address, birthDay ,roleId  } = req.body;
+        const { fullName, phoneNumber, email, address, birthDay, roleId, driverInfo } = req.body;
+        
+        // Kiểm tra vai trò không thể cập nhật
         if (roleId === 'superadmin' || roleId === 'companyadmin') {
             return res.status(403).json({ success: false, msg: 'Bạn không thể cập nhật vai trò này' });
         }   
+        
+        // Tìm người dùng
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ success: false, msg: 'Không tìm thấy người dùng' });
         }
+        
+        // Kiểm tra email trùng lặp
         if (email && (email !== user.email)) {
             const existingUser = await User.findOne({ email: email });
             if (existingUser) {
                 return res.status(400).json({ success: false, msg: 'Email đã được sử dụng' });
             }
         }
+        
+        // Cập nhật thông tin người dùng
         const updatedUser = await User.findByIdAndUpdate(
             userId,
             {
@@ -275,6 +441,21 @@ const updateUser = async (req, res) => {
             },
             { new: true }
         ).select('-password');
+
+        // Nếu vai trò là Driver, cập nhật bảng Driver nếu có thông tin
+        if (user.roleId === 'driver' && driverInfo) {
+            const { licenseNumber, companyId, bustypeId, trips, isActive } = driverInfo;
+            await Driver.findOneAndUpdate(
+                { userId: userId },
+                {
+                    $set: {
+                        licenseNumber: licenseNumber,
+                    }
+                },
+                { new: true, upsert: true }
+            );
+        }
+
         return res.status(200).json({ success: true, msg: 'Cập nhật thông tin thành công', data: updatedUser });
     } catch (error) {
         return res.status(500).json({ success: false, msg: 'Cập nhật thông tin thất bại', error: error.message });
@@ -369,8 +550,29 @@ const searchUsers = async (req, res) => {
         res.status(500).json({ success: false, msg: 'Tìm kiếm người dùng thất bại', error: error.message });
     }
 };
+
+const getAllUsersByLastLogin = async (req, res) => {
+    try {
+        const users = await User.find({})
+            .sort({ lastLogin: -1 }) // Sắp xếp theo lastLogin giảm dần
+            .exec();
+
+        res.status(200).json({
+            success: true,
+            msg: 'Lấy danh sách người dùng thành công',
+            users,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            msg: 'Lỗi khi lấy danh sách người dùng. Vui lòng thử lại sau.',
+            error: error.message,
+        });
+    }
+};
+
+
 module.exports = {
-    sendResetPasswordEmail,
     resetPassword,
     userRegister,
     userLogin,
@@ -380,7 +582,11 @@ module.exports = {
     getAllUsers,
     getUsersByRole,
     updateUserStatus,
+    verifyResetCode,
+    sendResetCode,
     addLoyaltyPoints,
     searchUsers,
-    confirmRegistration
+    confirmRegistration,
+    redeemPointsForVoucher,
+    getAllUsersByLastLogin
 };

@@ -1,27 +1,35 @@
 const BusType = require('../models/BusType');
-const Trip = require('../models/Trip'); // Import thêm model Trip nếu cần kiểm tra liên kết
+const Trip = require('../models/Trip');
+const {uploadImage}  = require('../config/cloudinaryConfig');
 
-// Tạo loại xe buýt mới
 exports.createBusType = async (req, res) => {
   try {
     const { name, description, seats, floorCount } = req.body;
-    const companyId = req.user.companyId; // Lấy `companyId` từ `req.user` sau khi xác thực
+    const companyId = req.user.companyId;
 
     if (!companyId) {
       return res.status(403).json({ success: false, message: 'Unauthorized: CompanyId is required.' });
     }
-
-    // Kiểm tra dữ liệu đầu vào và `companyId`
     if (!name || seats === undefined || seats <= 0) {
       return res.status(400).json({ success: false, message: 'Name and a valid number of seats are required' });
+    }
+
+    let imageUrls = [];
+
+    if (req.files) {
+      for (const file of req.files) {
+        const { url } = await uploadImage(file.path, 'bus_types');
+        imageUrls.push(url);
+      }
     }
 
     const newBusType = new BusType({
       name,
       description,
       seats,
-      floorCount: floorCount || 1, // Mặc định là 1 tầng nếu không có giá trị
-      companyId, // Gán `companyId` vào loại xe
+      floorCount: floorCount || 1,
+      companyId,
+      images: imageUrls
     });
 
     await newBusType.save();
@@ -85,7 +93,8 @@ exports.updateBusType = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Unauthorized access: CompanyId is required.' });
     }
 
-    if (!name && !description && seats === undefined && floorCount === undefined) {
+    // Check if there are any fields to update
+    if (!name && !description && seats === undefined && floorCount === undefined && !req.files) {
       return res.status(400).json({ success: false, message: 'No fields to update' });
     }
 
@@ -94,7 +103,23 @@ exports.updateBusType = async (req, res) => {
     if (description !== undefined) updates.description = description;
     if (seats !== undefined && seats > 0) updates.seats = seats;
     if (floorCount !== undefined && floorCount > 0) updates.floorCount = floorCount;
-    const updatedBusType = await BusType.findOneAndUpdate({ _id: id, companyId }, updates, { new: true });
+
+    // Handle images if provided in the update request
+    if (req.files && req.files.length > 0) {
+      let imageUrls = [];
+      for (const file of req.files) {
+        const { url } = await uploadImage(file.path, 'bus_types'); // Upload to Cloudinary
+        imageUrls.push(url);
+      }
+      updates.images = imageUrls; // This will replace the existing images
+    }
+
+    // Update the bus type
+    const updatedBusType = await BusType.findOneAndUpdate(
+      { _id: id, companyId },
+      updates,
+      { new: true }
+    );
 
     if (!updatedBusType) {
       return res.status(404).json({ success: false, message: 'Bus type not found or access denied.' });
@@ -132,7 +157,6 @@ exports.deleteBusType = async (req, res) => {
   }
 };
 
-
 exports.getBusTypeNames = async (req, res) => {
   try {
     const companyId = req.user.companyId;
@@ -143,3 +167,25 @@ exports.getBusTypeNames = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to get bus type names', error: err.message });
   }
 };
+
+exports.getAllBusType = async (req, res) => {
+  try {
+    const busTypes = await BusType.find()
+      .select('name floorCount seats -_id images description companyId')
+      .populate({
+        path: 'companyId',
+        select: 'name -_id',
+      });
+    const data = busTypes.map(busType => ({
+      ...busType._doc,
+      companyName: busType.companyId?.name || null, 
+      companyId: undefined,
+    }));
+
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to get bus type names', error: err.message });
+  }
+};
+
+

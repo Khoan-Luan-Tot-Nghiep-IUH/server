@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - MONGODB_URL=mongodb+srv://KhoaLuan:DepTraiSo1@khoaluantotnghiep.ibxma.mongodb.net/KhoaLuan?retryWrites=true&w=majority
+      - ACCESS_TOKEN=ACCESS_TOKEN
+      - BASE_URL=http://localhost:5000
+      - JWT_SECRET=5443423
+      - VNP_TMN_CODE=WC1CDPC2
+      - VNP_HASH_SECRET=XJW6GVITL97EX6KMDS0UWJODK9IH95ZO
+      - VNP_URL=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+      - VNP_RETURN_URL=http://localhost:5000/api/vnpay/vnpay_return
+      - PAYOS_CLIENT_ID=33398575-a706-4603-85ff-24b6eff05822
+      - PAYOS_API_KEY=d3c173c6-ba93-4185-91c5-d979d1e6540f
+      - PAYOS_CHECKSUM_KEY=b853588d8ac649b8d5bb9e5a3b5dffbbaa1f9532e6241372cb91d8dae16dd092
+      - EMAIL_USER=tranthethanh852002@gmail.com
+      - EMAIL_PASS=zixnfqdunguxwdvc
+      - API_URL=http://localhost:5000
+      - CLIENT_URL=http://localhost:3000
+      - FACEBOOK_APP_ID=834932912070880
+      - FACEBOOK_APP_SECRET=98155b466b3292b4fc3b641e6bb544e9
+      - GOOGLE_CLIENT_ID=12478692708-8kfnc8jelmtht963r0fukmul21tsgf6m.apps.googleusercontent.com
+      - GOOGLE_CLIENT_SECRET=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
+      - API_KEY_MAP=CYhmM3PXTyg2cLaaTE5GI6dnnWwec8jARarxv3SQ43A
+      - TWILIO_ACCOUNT_SID=AC7f872210ea369548e3a1f6f1b83aaa47
+      - TWILIO_AUTH_TOKEN=8af758ffabbee12e684380b44a2b29fe
+      - TWILIO_VERIFY_SERVICE_SID=VA6a8f9183ab80458c18dece94d7b9caba
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"

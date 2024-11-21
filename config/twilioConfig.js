@@ -13,12 +13,10 @@ const sendVerificationCode = async (phoneNumber) => {
     return verification.status;
 };
 
-// Xác thực mã OTP
 const verifyCode = async (phoneNumber, code) => {
     const verificationCheck = await client.verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID)
         .verificationChecks
         .create({ to: phoneNumber, code: code });
-
     return verificationCheck.status;
 };
 

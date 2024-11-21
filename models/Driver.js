@@ -1,43 +1,49 @@
 const mongoose = require('mongoose');
 
 const DriverSchema = new mongoose.Schema({
-    name: {
+    licenseNumber: { 
         type: String,
         required: true,
         trim: true
     },
-    licenseNumber: {
-        type: String,
-        required: true,
-        unique: true,
-        trim: true
-    },
-    phoneNumber: {
-        type: String,
-        required: true,
-        trim: true
-    },
-    address: {
-        type: String,
-        trim: true
-    },
-    birthDate: {
-        type: Date,
+    companyId: { 
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Company',
         required: true
     },
-    hireDate: {
-        type: Date,
-        default: Date.now
+    baseSalary: {
+        type: Number,
+        required: true
     },
-    isActive: {
-        type: Boolean,
-        default: true
+    salaryRate: { 
+        type: Number,
+            required: true
+        },
+    bustypeId: { 
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Bustype',
     },
-    trips: [{
+    completedTrips: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Trip'
-    }]
+    }],
+    trips: [{ 
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Trip'
+    }],
+    userId: {  
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    amountCollectedByDriver: { type: Number, default: 0 },
+    isActive: { 
+        type: Boolean,
+        default: true
+    }
 });
 
+
 const Driver = mongoose.model('Driver', DriverSchema);
+
 module.exports = Driver;

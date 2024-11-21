@@ -25,21 +25,32 @@ const authMiddleware = {
             if (!token) {
                 return res.status(401).json({ success: false, message: 'Không tìm thấy token xác thực' });
             }
-
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const user = await User.findById(decoded.id).select('-password');
-
             if (!user) {
                 return res.status(401).json({ success: false, message: 'Token không hợp lệ hoặc người dùng không tồn tại' });
             }
-
+            if (user.currentToken !== token) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Phiên của bạn đã bị vô hiệu hóa. Vui lòng đăng nhập lại.'
+                });
+            }
+    
+            // Kiểm tra nếu tài khoản bị vô hiệu hóa
+            if (!user.isActive) {
+                return res.status(403).json({ success: false, message: 'Tài khoản của bạn đã bị vô hiệu hóa.' });
+            }
+    
             req.user = user;
             next();
         } catch (error) {
+            if (error.name === 'TokenExpiredError') {
+                return res.status(401).json({ success: false, message: 'Token đã hết hạn.' });
+            }
             return res.status(401).json({ success: false, message: 'Token không hợp lệ', error: error.message });
         }
     },
-
     isSuperAdmin: (req, res, next) => {
         if (req.user && req.user.roleId === 'superadmin') {
             next();
@@ -49,6 +60,9 @@ const authMiddleware = {
     },
 
     isCompanyAdmin: (req, res, next) => {
+        if (req.user.roleId === 'superadmin') {
+            return next(); // Cho phép superadmin tiếp tục
+        }
         if (req.user && req.user.roleId === 'companyadmin') {
             next();
         } else {
@@ -106,7 +120,13 @@ const authMiddleware = {
             res.status(403).json({ success: false, message: 'Tài khoản của bạn đã bị vô hiệu hóa.' });
         }
     },
-
+    isDriver: (req, res, next) => {
+        if (req.user && req.user.roleId === 'driver') {
+            next();
+        } else {
+            res.status(403).json({ success: false, message: 'Yêu cầu quyền tài xế.' });
+        }
+    },
     generateAccessToken
 };
 

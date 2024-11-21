@@ -3,7 +3,6 @@ module.exports = (io) => {
         if (!req.io) {
             req.io = io;
         }
-        console.log('Socket.io middleware triggered');
         next();
     };
 };

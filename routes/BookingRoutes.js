@@ -5,15 +5,18 @@ module.exports = (io) => {
 
     const router = express.Router();
 
-    // Chỉ sử dụng socketIoMiddleware cho route tạo booking
     const socketIoMiddleware = require('../middleware/socketIoMiddleware')(io);
-
+    router.get('/booking-drafts', authMiddleware.verifyToken, socketIoMiddleware, bookingController.getBookingDrafts);
+    router.post('/bookings-confirm', authMiddleware.verifyToken, socketIoMiddleware, bookingController.createBookingDraft);
     router.post('/bookings', authMiddleware.verifyToken, socketIoMiddleware, bookingController.createBooking);
-
-    // Các route khác không cần Socket.io middleware
-    router.get('/bookings', authMiddleware.verifyToken, bookingController.getUserBookings);
+    router.get('/payment-success', bookingController.paymentSuccess);
+    router.get('/payment-cancel', bookingController.paymentCancel);
+    router.get('/booking-history',authMiddleware.verifyToken, bookingController.getBookingHistory);
     router.get('/bookings/:id', authMiddleware.verifyToken, bookingController.getBookingById);
-    router.delete('/bookings/:id', authMiddleware.verifyToken, bookingController.cancelBooking);
 
+    router.delete('/bookings/:id', authMiddleware.verifyToken, bookingController.cancelBooking);
+    
+    router.patch('/bookings/:id/cancelSeat/:seatNumberToCancel', authMiddleware.verifyToken,bookingController.cancelSeatInBooking);
+    
     return router;
 };
