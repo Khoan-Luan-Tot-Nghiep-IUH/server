@@ -85,14 +85,17 @@ passport.use(new FacebookStrategy({
   try {
     console.log('Facebook Profile:', profile);
 
-    // Tìm user dựa trên Facebook ID
     let user = await User.findOne({ facebookId: profile.id });
     if (!user) {
-      // Tạo user mới nếu chưa tồn tại
+      const email = profile.emails && profile.emails[0]?.value 
+      ? profile.emails[0].value 
+      : `${profile.id}@facebook.com`;
+
       user = await User.create({
         facebookId: profile.id,
-        email: profile.emails && profile.emails[0]?.value,
+        email: email,
         fullName: `${profile.name.givenName} ${profile.name.familyName}`,
+        userName: `facebook_${profile.id}`
       });
     }
 
