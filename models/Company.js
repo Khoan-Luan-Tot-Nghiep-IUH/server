@@ -50,6 +50,8 @@
                 message: props => `${props.value} không phải là địa chỉ website hợp lệ!`
             }
         },
+        averageRating: { type: Number, default: 0 },
+        totalReviews: { type: Number, default: 0 }, 
         createdAt: {
             type: Date,
             default: () => moment().tz("Asia/Ho_Chi_Minh").toDate()
@@ -70,7 +72,8 @@
                 required: true
             }
         }]
-    }, {
+    }, 
+    {
         timestamps: true
     });
 
