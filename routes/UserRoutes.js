@@ -60,7 +60,7 @@ router.get('/google/callback',
       let userName = req.user.userName || generateUserName(req.user.email);
 
     const token = jwt.sign(
-      { id: req.user._id, email: req.user.email, fullName: req.user.fullName, userName },
+      { id: req.user._id, role: req.user.roleId ,email: req.user.email, fullName: req.user.fullName, userName },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -94,6 +94,7 @@ passport.use(new FacebookStrategy({
       user = await User.create({
         facebookId: profile.id,
         email: email,
+        roleId: "user",
         fullName: `${profile.name.givenName} ${profile.name.familyName}`,
         userName: `facebook_${profile.id}`
       });
