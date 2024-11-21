@@ -13,6 +13,7 @@ const userV2Controller= require('../controllers/userV2Controller');
 const generateUserName = (email) => {
   return email.split('@')[0] + Math.floor(Math.random() * 10000);
 };
+
 const googleStrategyOptions = {
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -20,10 +21,18 @@ const googleStrategyOptions = {
     ? 'https://server-zeym.onrender.com/api/user/google/callback'
     : 'http://localhost:5000/api/user/google/callback'
 };
+
 passport.use(new GoogleStrategy(googleStrategyOptions, async (accessToken, refreshToken, profile, done) => {
   try {
+    console.log('Google Profile:', profile);
+
     let user = await User.findOne({ googleId: profile.id });
+
     if (!user) {
+      if (!profile.emails || profile.emails.length === 0) {
+        return done(new Error('Email not found in Google profile'), null);
+      }
+
       user = await User.create({
         googleId: profile.id,
         email: profile.emails[0].value,
@@ -31,6 +40,7 @@ passport.use(new GoogleStrategy(googleStrategyOptions, async (accessToken, refre
         userName: generateUserName(profile.emails[0].value),
       });
     }
+
     return done(null, user);
   } catch (error) {
     console.error('Error in Google Strategy:', error);
@@ -42,13 +52,12 @@ router.get('/google',
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
 
-
 router.get('/google/callback', 
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
   async (req, res) => {
     try {
-      if (!req.user) {
-        return res.status(401).json({ message: 'Authentication failed' });
+      if (!req.user || !req.user.email) {
+        throw new Error('User or email not found in request');
       }
 
       let userName = req.user.userName || generateUserName(req.user.email);
