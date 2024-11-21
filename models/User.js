@@ -21,19 +21,21 @@ const UserSchema = new mongoose.Schema({
             return !this.googleId && !this.facebookId;
         },
     },
-    email: {
-        type: String,
-        required: true,
-        unique: true,
-        trim: true,
-        lowercase: true,
-        validate: {
-            validator: function(v) {
-                return /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(v);
-            },
-            message: props => `${props.value} không phải là email hợp lệ!`
-        }
+   email: {
+    type: String,
+    required: function() {
+        return !this.facebookId && !this.googleId;
     },
+    unique: true,
+    trim: true,
+    lowercase: true,
+    validate: {
+        validator: function(v) {
+            return v ? /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(v) : true;
+        },
+        message: props => `${props.value} không phải là email hợp lệ!`
+    }
+},
     password: {
         type: String,
         minlength: 8,
