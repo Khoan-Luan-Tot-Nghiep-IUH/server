@@ -76,7 +76,6 @@ exports.getCompanyDetails = async (req, res) => {
     }
 };
   
-
 // người dùng gửi && lấy yêu cầu && hủy yêu cầu
 exports.createCompanyRequest = async (req, res) => {
     try {

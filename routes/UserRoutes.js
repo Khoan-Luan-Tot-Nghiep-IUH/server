@@ -7,7 +7,7 @@ const passport = require('passport');
 const User = require('../models/User');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const userV2Controller= require('../controllers/userV2Controller');
-
+const FacebookStrategy = require('passport-facebook').Strategy;
 
 const generateUserName = (email) => {
   return email.split('@')[0] + Math.floor(Math.random() * 10000);
@@ -46,11 +46,9 @@ passport.use(new GoogleStrategy(googleStrategyOptions, async (accessToken, refre
     return done(error, null);
   }
 }));
-
 router.get('/google', 
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
-
 router.get('/google/callback', 
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
   async (req, res) => {
@@ -76,21 +74,62 @@ router.get('/google/callback',
   }
 });
 
+passport.use(new FacebookStrategy({
+  clientID: process.env.FACEBOOK_APP_ID,
+  clientSecret: process.env.FACEBOOK_APP_SECRET,
+  callbackURL: process.env.NODE_ENV === 'production'
+    ? 'https://your-production-domain.com/api/user/facebook/callback'
+    : 'http://localhost:5000/api/user/facebook/callback',
+  profileFields: ['id', 'emails', 'name'] 
+}, async (accessToken, refreshToken, profile, done) => {
+  try {
+    console.log('Facebook Profile:', profile);
 
+    // Tìm user dựa trên Facebook ID
+    let user = await User.findOne({ facebookId: profile.id });
+    if (!user) {
+      // Tạo user mới nếu chưa tồn tại
+      user = await User.create({
+        facebookId: profile.id,
+        email: profile.emails && profile.emails[0]?.value,
+        fullName: `${profile.name.givenName} ${profile.name.familyName}`,
+      });
+    }
+
+    return done(null, user);
+  } catch (error) {
+    console.error('Error in Facebook Strategy:', error);
+    return done(error, null);
+  }
+}));
 router.get('/facebook', passport.authenticate('facebook', { scope: ['email'] }));
-router.get('/facebook/callback', 
+
+router.get('/facebook/callback',
   passport.authenticate('facebook', { session: false, failureRedirect: '/login' }),
   async (req, res) => {
     try {
-      if (!req.user || !req.user.email) {
-        throw new Error('User or email not found in request');
+      if (!req.user) {
+        throw new Error('User not authenticated');
       }
+
+      // Nếu user không có email
+      if (!req.user.email) {
+        return res.status(400).json({
+          message: 'Không tìm thấy email trong tài khoản Facebook. Vui lòng nhập email để hoàn tất đăng ký.'
+        });
+      }
+
+      // Tạo JWT Token
       const token = jwt.sign(
         { id: req.user._id, email: req.user.email, fullName: req.user.fullName },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
+
+      // Lưu token vào database (optional)
       await User.findByIdAndUpdate(req.user._id, { currentToken: token });
+
+      // Redirect về frontend với token
       res.json({ token, user: req.user });
     } catch (error) {
       console.error('Error in Facebook callback:', error);

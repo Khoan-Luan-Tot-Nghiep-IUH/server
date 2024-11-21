@@ -93,7 +93,6 @@ exports.updateBusType = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Unauthorized access: CompanyId is required.' });
     }
 
-    // Check if there are any fields to update
     if (!name && !description && seats === undefined && floorCount === undefined && !req.files) {
       return res.status(400).json({ success: false, message: 'No fields to update' });
     }
