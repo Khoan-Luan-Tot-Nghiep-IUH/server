@@ -233,6 +233,16 @@ exports.createBooking = async (req, res) => {
         { session }
       );
   
+      if (paymentMethod === 'OnBoard') {
+        const user = await User.findById(userId);
+        if (user) {
+          const rewardPoints = bookingDraft.seatNumbers.length * 10;
+          user.loyaltyPoints += rewardPoints;
+          await user.save();
+        }
+      }
+      
+  
       if (paymentMethod === 'Online') {
         const paymentItems = bookingDraft.seatNumbers.map(seatNumber => {
           const seatInfo = seats.find(s => s.seatNumber === seatNumber);
@@ -294,6 +304,14 @@ exports.paymentSuccess = async (req, res) => {
         booking.status = 'Confirmed';
         booking.paymentStatus = 'Paid';
         await booking.save();
+
+        const user = await User.findById(booking.user);
+        if (user) {
+          const rewardPoints = booking.seatNumbers.length * 10;
+          user.loyaltyPoints += rewardPoints;
+          await user.save();
+        }
+
         return res.redirect(`${process.env.CLIENT_URL}/user/ticket-buy`);
     } catch (error) {
         return res.status(500).json({ success: false, message: 'Lỗi khi xử lý thanh toán', error: error.message });

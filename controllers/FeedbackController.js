@@ -1,61 +1,87 @@
-const Feedback = require('../models/Feedback');
+const Booking = require('../models/Booking');
 const Trip = require('../models/Trip');
+const CompanyFeedback = require('../models/Feedback');
+const Company = require('../models/Company');
+const { uploadImage } = require('../config/cloudinaryConfig');
+const User = require('../models/User');
 
-// Tạo phản hồi mới cho chuyến đi
-exports.createFeedback = async (req, res) => {
-    try {
-        const { tripId, rating, comment } = req.body;
-        const userId = req.user._id;
+exports.createCompanyFeedback = async (req, res) => {
+  const { companyId, rating, comment } = req.body; 
+  const userId = req.user._id; 
 
-        const trip = await Trip.findById(tripId);
-        if (!trip) {
-            return res.status(404).json({ success: false, message: 'Trip not found' });
-        }
+  try {
+    const userBooking = await Booking.findOne({
+      user: userId,
+    }).populate('trip'); 
 
-        const newFeedback = new Feedback({
-            user: userId,
-            trip: tripId,
-            rating,
-            comment
+    if (!userBooking) {
+      return res.status(403).json({
+        error: 'Bạn chỉ có thể đánh giá công ty mà bạn đã đặt vé trước đó!',
+      });
+    }
+
+    const trip = await Trip.findOne({
+      _id: userBooking.trip._id,
+      companyId,
+      status: 'Completed',
+    });
+
+    if (!trip) {
+      return res.status(403).json({
+        error: 'Bạn chỉ có thể đánh giá sau khi hoàn thành chuyến đi!',
+      });
+    }
+
+    let images = []; 
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const uploadedImage = await uploadImage(file.path, 'feedback_images');
+        images.push({
+          url: uploadedImage.url,
         });
-
-        await newFeedback.save();
-
-        res.status(201).json({ success: true, data: newFeedback });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to create feedback', error: error.message });
+      }
     }
+
+    const feedback = new CompanyFeedback({
+      companyId,
+      trip: userBooking.trip._id,
+      user: userId,
+      rating,
+      comment,
+      images,
+    });
+
+    await feedback.save();
+    const user = await User.findById(userId);
+    if (user) {
+      user.loyaltyPoints += 10; 
+      await user.save();
+    }
+    await updateCompanyRating(companyId);
+
+    res.status(201).json({
+      message: 'Đánh giá của bạn đã được ghi nhận thành công!',
+      loyaltyPoints: user ? user.loyaltyPoints : null,
+      feedback,
+    });
+  } catch (error) {
+    console.error(`Error creating feedback for company ${companyId}:`, error.message);
+    res.status(500).json({
+      error: 'Hệ thống gặp lỗi. Không thể ghi nhận đánh giá của bạn. Vui lòng thử lại!',
+    });
+  }
 };
 
-// Lấy danh sách phản hồi theo chuyến đi
-exports.getFeedbacksByTrip = async (req, res) => {
-    try {
-        const { tripId } = req.params;
-        const feedbacks = await Feedback.find({ trip: tripId }).populate('user', 'userName fullName');
+async function updateCompanyRating(companyId) {
+  try {
+    const feedbacks = await CompanyFeedback.find({ companyId });
+    const averageRating =
+      feedbacks.reduce((acc, feedback) => acc + feedback.rating, 0) / feedbacks.length;
 
-        if (!feedbacks || feedbacks.length === 0) {
-            return res.status(404).json({ success: false, message: 'No feedbacks found for this trip' });
-        }
+    await Company.findByIdAndUpdate(companyId, { averageRating });
 
-        res.status(200).json({ success: true, data: feedbacks });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to retrieve feedbacks', error: error.message });
-    }
-};
-
-// Xóa phản hồi
-exports.deleteFeedback = async (req, res) => {
-    try {
-        const { feedbackId } = req.params;
-
-        const feedback = await Feedback.findByIdAndDelete(feedbackId);
-
-        if (!feedback) {
-            return res.status(404).json({ success: false, message: 'Feedback not found' });
-        }
-
-        res.status(200).json({ success: true, message: 'Feedback deleted successfully' });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to delete feedback', error: error.message });
-    }
-};
+    console.log(`Cập nhật điểm trung bình cho công ty ${companyId}: ${averageRating}`);
+  } catch (error) {
+    console.error(`Error updating average rating for company ${companyId}:`, error.message);
+  }
+}
