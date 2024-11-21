@@ -9,6 +9,10 @@ const User = require('../models/User');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const userV2Controller= require('../controllers/userV2Controller');
 
+
+const generateUserName = (email) => {
+  return email.split('@')[0] + Math.floor(Math.random() * 10000);
+};
 const googleStrategyOptions = {
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -16,48 +20,55 @@ const googleStrategyOptions = {
     ? 'https://server-zeym.onrender.com/api/user/google/callback'
     : 'http://localhost:5000/api/user/google/callback'
 };
-
-
 passport.use(new GoogleStrategy(googleStrategyOptions, async (accessToken, refreshToken, profile, done) => {
+  try {
+    let user = await User.findOne({ googleId: profile.id });
+    if (!user) {
+      user = await User.create({
+        googleId: profile.id,
+        email: profile.emails[0].value,
+        fullName: profile.displayName,
+        userName: generateUserName(profile.emails[0].value),
+      });
+    }
+    return done(null, user);
+  } catch (error) {
+    console.error('Error in Google Strategy:', error);
+    return done(error, null);
+  }
 }));
-
 
 router.get('/google', 
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
 
-const generateUserName = (email) => {
-  // Tạo userName từ phần trước "@" của email và một số ngẫu nhiên
-  return email.split('@')[0] + Math.floor(Math.random() * 10000);
-};
 
 router.get('/google/callback', 
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
   async (req, res) => {
     try {
-      let userName = req.user.userName;
-      if (!userName) {
-        userName = generateUserName(req.user.email);
+      if (!req.user) {
+        return res.status(401).json({ message: 'Authentication failed' });
       }
 
-      // Tạo JWT token
+      let userName = req.user.userName || generateUserName(req.user.email);
+
       const token = jwt.sign(
         { id: req.user._id, email: req.user.email, fullName: req.user.fullName, userName },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
 
-      // Lưu token vào `currentToken`
       await User.findByIdAndUpdate(req.user._id, { currentToken: token });
 
-      // Chuyển hướng về phía client với token
       res.redirect(`${process.env.CLIENT_URL}/login?token=${token}`);
     } catch (error) {
-      console.error('Error in Google callback:', error); // Log lỗi chi tiết
+      console.error('Error in Google callback:', error);
       res.status(500).json({ message: 'Google login failed', error: error.message });
     }
   }
 );
+
 
 
 router.get('/facebook', facebookLogin);
