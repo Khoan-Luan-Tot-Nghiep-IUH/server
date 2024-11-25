@@ -354,7 +354,8 @@ exports.getBookingHistory = async (req, res) => {
                 populate: [
                     { path: 'departureLocation', select: 'name' }, 
                     { path: 'arrivalLocation', select: 'name' },   
-                    { path: 'busType', select: 'name' },         
+                    { path: 'busType', select: 'name' },
+                    {path: 'companyId' , select:"_id"},         
                 ]
             })
             .sort({ createdAt: -1 }); 
