@@ -380,7 +380,6 @@ exports.getBookingHistory = async (req, res) => {
     }
 };
 
-
 exports.confirmPaymentOnBoard = async (req, res) => {
     try {
         const booking = await Booking.findById(req.params.bookingId);

@@ -65,6 +65,8 @@ const companyRoutes = require('./routes/CompanyRoutes');
 const DriverRoutes = require('./routes/DriverRoutes');
 const RevenueRoutes = require('./routes/RevenueRoutes');
 const voucherRoutes = require('./routes/voucherRoutes');
+const GlobalNotification = require('./routes/GlobalRoutes');
+
 require('./utils/cron');
 
 
@@ -80,6 +82,7 @@ app.use('/api/companies',companyRoutes);
 app.use('/api', DriverRoutes);
 app.use('/api',RevenueRoutes)
 app.use('/api/vouchers', voucherRoutes);
+app.use('/api/',GlobalNotification)
 
 
 
