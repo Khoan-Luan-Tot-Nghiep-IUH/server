@@ -43,12 +43,6 @@
         website: {
             type: String,
             trim: true,
-            validate: {
-                validator: function(v) {
-                    return /^(http|https):\/\/[^ "]+$/.test(v);
-                },
-                message: props => `${props.value} không phải là địa chỉ website hợp lệ!`
-            }
         },
         averageRating: { type: Number, default: 0 },
         totalReviews: { type: Number, default: 0 }, 
@@ -56,6 +50,15 @@
             type: Date,
             default: () => moment().tz("Asia/Ho_Chi_Minh").toDate()
         },
+        feedbacks: [
+            {
+              userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+              fullName: { type: String },
+              rating: { type: Number },
+              comment: { type: String },
+              createdAt: { type: Date, default: Date.now },
+            },
+          ],
         isActive: {
             type: Boolean,
             default: true

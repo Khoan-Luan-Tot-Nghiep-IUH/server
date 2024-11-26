@@ -5,7 +5,6 @@ const { verifyToken, isSuperAdmin } = require('../middleware/authMiddleware');
 const { upload } = require('../config/cloudinaryConfig');
 // Route lấy danh sách thông báo cho user
 router.get('/global-notifications', verifyToken,getGlobalNotifications);
-
 router.patch('/global-notifications/:id/checked', verifyToken, markAsChecked);
 
 

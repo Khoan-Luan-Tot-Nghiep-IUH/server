@@ -184,4 +184,5 @@ router.get('/superadmin', (req, res) => {
 router.get('/getLastLoginUser',authMiddleware.verifyToken,authMiddleware.isSuperAdmin,userController.getAllUsersByLastLogin);
 router.get('/requests', authMiddleware.verifyToken,authMiddleware.isSuperAdmin, userV2Controller.getCompanyRequests);
 router.patch('/requests/update', authMiddleware.verifyToken,authMiddleware.isSuperAdmin, userV2Controller.updateCompanyRequest);
+
 module.exports = router;

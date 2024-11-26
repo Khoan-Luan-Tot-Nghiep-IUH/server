@@ -4,6 +4,7 @@ const BusType = require('../models/BusType');
 
 const CompanyRequest = require('../models/CompanyRequest');
 const User = require('../models/User');
+const { default: mongoose } = require('mongoose');
 exports.getCompanyNames = async (req, res) => {
     try {
         const companies = await Company.find({ isActive: true }).select('name').lean();
@@ -217,12 +218,24 @@ exports.getCompanyRequests = async (req, res) => {
 exports.updateCompanyRequest = async (req, res) => {
     try {
         const { requestId, status } = req.body;
+
+        // Kiểm tra trạng thái hợp lệ
         if (!['Approved', 'Rejected'].includes(status)) {
             return res.status(400).json({
                 success: false,
                 message: 'Trạng thái không hợp lệ. Vui lòng chọn Approved hoặc Rejected.'
             });
         }
+
+        // Kiểm tra requestId có hợp lệ không
+        if (!mongoose.Types.ObjectId.isValid(requestId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID yêu cầu không hợp lệ.'
+            });
+        }
+
+        // Tìm yêu cầu theo requestId
         const request = await CompanyRequest.findById(requestId);
         if (!request) {
             return res.status(404).json({
@@ -230,6 +243,8 @@ exports.updateCompanyRequest = async (req, res) => {
                 message: 'Yêu cầu không tồn tại.'
             });
         }
+
+        // Kiểm tra trạng thái hiện tại của yêu cầu
         if (request.status !== 'Pending') {
             return res.status(400).json({
                 success: false,
@@ -237,10 +252,13 @@ exports.updateCompanyRequest = async (req, res) => {
             });
         }
 
+        // Cập nhật trạng thái yêu cầu
         request.status = status;
         await request.save();
 
+        // Nếu phê duyệt yêu cầu -> Tạo công ty và cập nhật người dùng
         if (status === 'Approved') {
+            // Tạo mới công ty
             const newCompany = new Company({
                 name: request.name,
                 address: request.address,
@@ -251,6 +269,7 @@ exports.updateCompanyRequest = async (req, res) => {
             });
             await newCompany.save();
 
+            // Tìm người dùng liên quan
             const user = await User.findById(request.userId);
             if (!user) {
                 return res.status(404).json({
@@ -267,9 +286,10 @@ exports.updateCompanyRequest = async (req, res) => {
         return res.status(200).json({
             success: true,
             message: `Yêu cầu đã được ${status === 'Approved' ? 'phê duyệt' : 'từ chối'}.`,
-            request
+            data: request
         });
     } catch (error) {
+        console.error('Lỗi khi cập nhật trạng thái yêu cầu:', error.message);
         return res.status(500).json({
             success: false,
             message: 'Lỗi khi cập nhật trạng thái yêu cầu.',

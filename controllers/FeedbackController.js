@@ -4,15 +4,16 @@ const CompanyFeedback = require('../models/Feedback');
 const Company = require('../models/Company');
 const { uploadImage } = require('../config/cloudinaryConfig');
 const User = require('../models/User');
+const Feedback = require('../models/Feedback');
 
 exports.createCompanyFeedback = async (req, res) => {
-  const { companyId, rating, comment } = req.body; 
-  const userId = req.user._id; 
+  const { companyId, rating, comment } = req.body;
+  const userId = req.user._id;
 
   try {
     const userBooking = await Booking.findOne({
       user: userId,
-    }).populate('trip'); 
+    }).populate('trip');
 
     if (!userBooking) {
       return res.status(403).json({
@@ -32,17 +33,16 @@ exports.createCompanyFeedback = async (req, res) => {
       });
     }
 
-    let images = []; 
+    let images = [];
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         const uploadedImage = await uploadImage(file.path, 'feedback_images');
-        images.push({
-          url: uploadedImage.url,
-        });
+        images.push({ url: uploadedImage.url });
       }
     }
 
-    const feedback = new CompanyFeedback({
+    const user = await User.findById(userId);
+    const feedback = new Feedback({
       companyId,
       trip: userBooking.trip._id,
       user: userId,
@@ -52,12 +52,24 @@ exports.createCompanyFeedback = async (req, res) => {
     });
 
     await feedback.save();
-    const user = await User.findById(userId);
+
+    const company = await Company.findById(companyId);
+    if (company) {
+      company.feedbacks.push({
+        userId: user._id,
+        fullName: user.fullName,
+        rating,
+        comment,
+        createdAt: feedback.createdAt,
+      });
+      await company.save();
+      await updateCompanyRating(companyId);
+    }
+
     if (user) {
-      user.loyaltyPoints += 10; 
+      user.loyaltyPoints += 10;
       await user.save();
     }
-    await updateCompanyRating(companyId);
 
     res.status(201).json({
       message: 'Đánh giá của bạn đã được ghi nhận thành công!',
@@ -72,14 +84,24 @@ exports.createCompanyFeedback = async (req, res) => {
   }
 };
 
+
 async function updateCompanyRating(companyId) {
   try {
     const feedbacks = await CompanyFeedback.find({ companyId });
-    const averageRating =
-      feedbacks.reduce((acc, feedback) => acc + feedback.rating, 0) / feedbacks.length;
 
+    if (feedbacks.length === 0) {
+      // Không có đánh giá, cập nhật điểm trung bình là 0
+      await Company.findByIdAndUpdate(companyId, { averageRating: 0 });
+      console.log(`Cập nhật điểm trung bình cho công ty ${companyId}: 0`);
+      return;
+    }
+
+    // Tính điểm trung bình
+    const totalRating = feedbacks.reduce((acc, feedback) => acc + feedback.rating, 0);
+    const averageRating = totalRating / feedbacks.length;
+
+    // Cập nhật điểm trung bình
     await Company.findByIdAndUpdate(companyId, { averageRating });
-
     console.log(`Cập nhật điểm trung bình cho công ty ${companyId}: ${averageRating}`);
   } catch (error) {
     console.error(`Error updating average rating for company ${companyId}:`, error.message);
