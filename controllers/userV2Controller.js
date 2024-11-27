@@ -190,17 +190,20 @@ exports.cancelTripRequest = async (req, res) => {
 
 exports.getCompanyNames = async (req, res) => {
     try {
-        const companies = await Company.find({ isActive: true }).select('name').lean();
+        const companies = await Company.find({ isActive: true }).select('name _id').lean();
         if (!companies.length) {
             return res.status(404).json({
                 success: false,
                 message: 'Không có công ty nào được tìm thấy.'
             });
         }
-        const companyNames = companies.map(company => company.name);
+        const companyData = companies.map(company => ({
+            id: company._id,
+            name: company.name
+        }));
         return res.status(200).json({
             success: true,
-            data: companyNames
+            data: companyData
         });
     } catch (error) {
         return res.status(500).json({
@@ -210,6 +213,7 @@ exports.getCompanyNames = async (req, res) => {
         });
     }
 };
+
 
 exports.getBusTypesByCompany = async (req, res) => {
     try {

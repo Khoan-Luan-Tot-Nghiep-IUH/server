@@ -60,7 +60,7 @@ router.get('/google/callback',
       let userName = req.user.userName || generateUserName(req.user.email);
 
     const token = jwt.sign(
-      { id: req.user._id, role: req.user.roleId ,email: req.user.email, fullName: req.user.fullName, userName },
+      { id: req.user._id, roleId: req.user.roleId ,email: req.user.email, fullName: req.user.fullName, userName },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -125,7 +125,7 @@ router.get('/facebook/callback',
 
       // Tạo JWT Token
       const token = jwt.sign(
-        { id: req.user._id, email: req.user.email, fullName: req.user.fullName },
+        { id: req.user._id,roleId:req.user.roleId, email: req.user.email, fullName: req.user.fullName },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
