@@ -156,8 +156,8 @@ router.delete('/companies/cancel',authMiddleware.verifyToken,userV2Controller.ca
 
 // gửi yêu  cầu mở chuyến đi phù hợp với người dùng
 router.post('/trip-request',authMiddleware.verifyToken,userV2Controller.createTripRequest);
-router.get('/trip-request', authMiddleware.verifyToken, userV2Controller.getUserTripRequests);
-router.delete('/trip-request/:requestId', authMiddleware.verifyToken, userV2Controller.cancelTripRequest);
+router.get('/trip-requests', authMiddleware.verifyToken, userV2Controller.getUserTripRequests);
+router.delete('/trip-requests/:requestId', authMiddleware.verifyToken, userV2Controller.cancelTripRequest);
 
 
 //gửi mã trước 
