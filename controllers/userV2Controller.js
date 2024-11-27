@@ -1,10 +1,193 @@
-const Company = require('../models/Company');
-
-const BusType = require('../models/BusType');
-
 const CompanyRequest = require('../models/CompanyRequest');
 const User = require('../models/User');
 const { default: mongoose } = require('mongoose');
+
+const TripRequest = require('../models/TripRequest');
+const Location = require('../models/Location');
+const Company = require('../models/Company');
+const BusType = require('../models/BusType');
+const moment = require('moment-timezone');
+const Seat = require('../models/Seat'); 
+
+
+// mở + lấy + hủy yêu cầu chuyến đi gửi đến công ty
+exports.createTripRequest = async (req, res) => {
+    try {
+        const { departureLocation, arrivalLocation, preferredDepartureTime, message, busType, companyId, seatNumbers } = req.body;
+        const { _id: userId } = req.user;
+
+        // Kiểm tra điểm khởi hành và điểm đến
+        const departureLoc = await Location.findById(departureLocation);
+        const arrivalLoc = await Location.findById(arrivalLocation);
+        if (!departureLoc || !arrivalLoc) {
+            return res.status(400).json({
+                success: false,
+                message: 'Điểm khởi hành hoặc điểm đến không hợp lệ.',
+            });
+        }
+
+        // Kiểm tra công ty
+        const company = await Company.findById(companyId);
+        if (!company) {
+            return res.status(404).json({
+                success: false,
+                message: 'Công ty không tồn tại.',
+            });
+        }
+
+        const busTypeInfo = await BusType.findOne({ _id: busType, companyId });
+        if (!busTypeInfo) {
+            return res.status(400).json({
+                success: false,
+                message: 'Loại xe không thuộc công ty đã chọn.',
+            });
+        }
+
+        if (!seatNumbers || seatNumbers.length < 3) {
+            return res.status(400).json({
+                success: false,
+                message: 'Bạn phải đặt tối thiểu 3 ghế.',
+            });
+        }
+
+        const maxSeats = busTypeInfo.seats;
+        const invalidSeats = seatNumbers.filter(seat => seat < 1 || seat > maxSeats);
+        if (invalidSeats.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: `Các ghế sau không hợp lệ: ${invalidSeats.join(', ')}.`,
+            });
+        }
+
+        if (seatNumbers.includes(1)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Ghế số 1 không được phép đặt.'
+            });
+        }
+
+        const now = moment();
+        const minimumDepartureTime = now.add(5, 'days'); 
+        const preferredTimeUTC = moment.tz(preferredDepartureTime, 'Asia/Ho_Chi_Minh').utc();
+
+        if (!preferredTimeUTC.isValid()) {
+            return res.status(400).json({
+                success: false,
+                message: 'Thời gian khởi hành mong muốn không hợp lệ.',
+            });
+        }
+
+        if (preferredTimeUTC.isBefore(minimumDepartureTime)) {
+            return res.status(400).json({
+                success: false,
+                message: `Thời gian khởi hành phải lớn hơn ngày hiện tại ít nhất 5 ngày (${minimumDepartureTime.format('YYYY-MM-DD HH:mm:ss')}).`,
+            });
+        }
+
+        const duplicateRequest = await TripRequest.findOne({
+            userId,
+            departureLocation,
+            arrivalLocation,
+            preferredDepartureTime: preferredTimeUTC,
+            status: 'Pending', 
+        });
+
+        if (duplicateRequest) {
+            return res.status(400).json({
+                success: false,
+                message: 'Yêu cầu đã tồn tại. Bạn không thể gửi yêu cầu trùng lặp.',
+            });
+        }
+        const tripRequest = new TripRequest({
+            userId,
+            departureLocation,
+            arrivalLocation,
+            preferredDepartureTime: preferredTimeUTC,
+            seatNumbers,
+            message: message || '',
+            companyId,
+            busType,
+        });
+
+        await tripRequest.save();
+
+        res.status(201).json({
+            success: true,
+            message: 'Yêu cầu tạo chuyến đi đã được gửi thành công.',
+            data: tripRequest,
+        });
+    } catch (error) {
+        console.error('Error creating trip request:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Gửi yêu cầu tạo chuyến đi thất bại.',
+            error: error.message,
+        });
+    }
+};
+
+exports.getUserTripRequests = async (req, res) => {
+    try {
+        const { _id: userId } = req.user;
+
+        const tripRequests = await TripRequest.find({ userId })
+            .populate('departureLocation', 'name address')
+            .populate('arrivalLocation', 'name address')
+            .populate('companyId', 'name')
+            .populate('busType', 'name seats floorCount')
+            .sort({ createdAt: -1 }); 
+
+        res.status(200).json({
+            success: true,
+            data: tripRequests,
+        });
+    } catch (error) {
+        console.error('Error fetching trip requests:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lấy danh sách yêu cầu thất bại.',
+            error: error.message,
+        });
+    }
+};
+exports.cancelTripRequest = async (req, res) => {
+    try {
+        const { requestId } = req.params;
+        const { _id: userId } = req.user;
+        const tripRequest = await TripRequest.findOne({ _id: requestId, userId });
+
+        if (!tripRequest) {
+            return res.status(404).json({
+                success: false,
+                message: 'Yêu cầu không tồn tại hoặc bạn không có quyền hủy yêu cầu này.',
+            });
+        }
+
+        if (tripRequest.status !== 'Pending') {
+            return res.status(400).json({
+                success: false,
+                message: 'Yêu cầu này không thể hủy vì nó đã được xử lý.',
+            });
+        }
+        await TripRequest.findByIdAndDelete(requestId);
+
+        res.status(200).json({
+            success: true,
+            message: 'Yêu cầu đã được hủy thành công.',
+        });
+    } catch (error) {
+        console.error('Error canceling trip request:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Hủy yêu cầu thất bại.',
+            error: error.message,
+        });
+    }
+};
+
+
+
+
 exports.getCompanyNames = async (req, res) => {
     try {
         const companies = await Company.find({ isActive: true }).select('name').lean();

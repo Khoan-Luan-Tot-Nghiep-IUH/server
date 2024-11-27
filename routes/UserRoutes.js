@@ -154,6 +154,12 @@ router.post('/companies/request',authMiddleware.verifyToken,userV2Controller.cre
 router.get('/companies/request',authMiddleware.verifyToken,userV2Controller.getUserRequests);
 router.delete('/companies/cancel',authMiddleware.verifyToken,userV2Controller.cancelUserRequest);
 
+// gửi yêu  cầu mở chuyến đi phù hợp với người dùng
+router.post('/trip-request',authMiddleware.verifyToken,userV2Controller.createTripRequest);
+router.get('/trip-request', authMiddleware.verifyToken, userV2Controller.getUserTripRequests);
+router.delete('/trip-request/:requestId', authMiddleware.verifyToken, userV2Controller.cancelTripRequest);
+
+
 //gửi mã trước 
 router.post('/forgot-password', userController.sendResetCode);
 //xác nhận mã và nhập passmoi
