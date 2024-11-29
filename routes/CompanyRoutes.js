@@ -24,7 +24,7 @@ router.patch('/employees/:userId/disable',authMiddleware.verifyToken,authMiddlew
 router.get('/notifications', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.getNotifications);
 
 // Route mới: Lấy danh sách đặt vé của công ty
-router.get('/bookings', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.getBookingsByCompany);
+router.get('/bookings', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.getBookingStatsAndUsers);
 
 
 // tôi chưa gọi 3 hàm này

@@ -4,54 +4,67 @@ const slugify = require('slugify');
 
 //đổi điểm 100 điểm = 10% voucher!
 const redeemPointsForVoucher = async (req, res) => {
-    try {
-      const userId = req.user._id;
-      const { points } = req.body;
-  
-      const pointsRequiredFor10Percent = 100;
-      const discountAmount = Math.floor((points / pointsRequiredFor10Percent) * 10);
-  
-      if (discountAmount <= 0) {
-        return res.status(400).json({ message: 'Số điểm không đủ để quy đổi thành voucher' });
-      }
-  
-      const user = await User.findById(userId);
-      if (!user) {
-        return res.status(404).json({ message: 'Người dùng không tồn tại' });
-      }
-  
-      if (user.loyaltyPoints < points) {
-        return res.status(400).json({ message: 'Điểm thưởng không đủ để đổi voucher' });
-      }
-  
-      user.loyaltyPoints -= points;
-      await user.save();
-  
-      const userName = slugify(user.fullName || 'User', { lower: true, remove: /[*+~.()'"!:@]/g });
-      const voucherCode = `VOUCHER${discountAmount}${userName}`.toUpperCase();
-  
+  try {
+    const userId = req.user._id;
+    const { points } = req.body;
 
-      const voucher = new Voucher({
+    const pointsRequiredFor10Percent = 100;
+    let discountAmount = Math.floor((points / pointsRequiredFor10Percent) * 10);
+
+    // Giới hạn tối đa giảm giá là 50%
+    if (discountAmount > 50) {
+      return res.status(400).json({ message: 'Mức giảm giá tối đa là 50%. Vui lòng nhập số điểm hợp lệ.' });
+    }
+
+    if (discountAmount <= 0) {
+      return res.status(400).json({ message: 'Số điểm không đủ để quy đổi thành voucher' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'Người dùng không tồn tại' });
+    }
+
+    if (user.loyaltyPoints < points) {
+      return res.status(400).json({ message: 'Điểm thưởng không đủ để đổi voucher' });
+    }
+
+    user.loyaltyPoints -= points;
+    await user.save();
+
+    const userName = slugify(user.fullName || 'User', { lower: true, remove: /[*+~.()'"!:@]/g });
+    const voucherCode = `VOUCHER${discountAmount}${userName}`.toUpperCase();
+
+    // Kiểm tra mã voucher đã tồn tại
+    let voucher = await Voucher.findOne({ code: voucherCode });
+    if (voucher) {
+      // Nếu tồn tại, tăng số lượng
+      voucher.quantity = (voucher.quantity || 1) + 1; // Đảm bảo có trường `quantity`
+    } else {
+      // Nếu không, tạo mới voucher
+      voucher = new Voucher({
         code: voucherCode,
         userId,
         discount: discountAmount,
-        expiryDate: new Date(new Date().setMonth(new Date().getMonth() + 1)), 
+        expiryDate: new Date(new Date().setMonth(new Date().getMonth() + 1)),
         isUsed: false,
         type: 'personal',
+        quantity: 1, // Số lượng mặc định là 1
       });
-  
-      await voucher.save(); 
-
-      user.vouchers.push(voucher._id);
-      await user.save();
-  
-      res.status(201).json({ message: 'Đổi điểm thành voucher thành công', voucher });
-    } catch (error) {
-      console.error('Error redeeming points:', error); 
-      res.status(500).json({ message: 'Lỗi khi đổi điểm lấy voucher', error });
     }
-  };
-  
+
+    await voucher.save();
+
+    user.vouchers.push(voucher._id);
+    await user.save();
+
+    res.status(201).json({ message: 'Đổi điểm thành voucher thành công', voucher });
+  } catch (error) {
+    console.error('Error redeeming points:', error);
+    res.status(500).json({ message: 'Lỗi khi đổi điểm lấy voucher', error });
+  }
+};
+
 
 // Tạo voucher mới (dành cho Admin hoặc chức năng quản trị)
 const createVoucher = async (req, res) => {
@@ -113,22 +126,25 @@ const applyVoucher = async (req, res) => {
   }
 };
 
+
 const getAllVouchers = async (req, res) => {
-    try {
-      const userId = req.user._id;
-      const filter = {
-        $or: [
-          { type: 'system', isUsed: false }, 
-          { type: 'personal', userId }  
-        ]
-      };
-  
-      const vouchers = await Voucher.find(filter);
-      res.status(200).json(vouchers);
-    } catch (error) {
-      res.status(500).json({ message: 'Lỗi khi lấy danh sách voucher', error });
-    }
-  };
+  try {
+    const userId = req.user._id;
+
+    const filter = {
+      $or: [
+        { type: 'system' },
+        { type: 'personal', userId } 
+      ]
+    };
+    const vouchers = await Voucher.find(filter).sort({ isUsed: 1 });
+
+    res.status(200).json(vouchers);
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi khi lấy danh sách voucher', error });
+  }
+};
+
   
 
 // Lấy voucher theo ID

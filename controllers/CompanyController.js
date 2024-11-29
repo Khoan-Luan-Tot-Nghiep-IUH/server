@@ -952,7 +952,7 @@ const companyController = {
             return res.status(500).json({ success: false, message: 'Lỗi khi lấy top người đặt vé theo thời gian.', error: error.message });
         }
     },  
-     getBookingsByCompany : async (req, res) => {
+    getBookingStatsAndUsers: async (req, res) => {
         try {
             const companyId = req.user.companyId;
     
@@ -963,23 +963,15 @@ const companyController = {
                 });
             }
     
-            const { startDate, endDate, status } = req.query;
-
-            const matchConditions = {
-                'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
-            };
+            // Tính toán thời gian
+            const today = new Date();
+            const currentMonth = today.getMonth() + 1;
+            const currentYear = today.getFullYear();
+            const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+            const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
     
-            if (startDate && endDate) {
-                matchConditions.bookingDate = {
-                    $gte: new Date(startDate),
-                    $lte: new Date(endDate),
-                };
-            }
-    
-            if (status) {
-                matchConditions.status = status;
-            }
-            const bookings = await Booking.aggregate([
+            // Aggregation để gom nhóm theo tháng và năm
+            const bookingStats = await Booking.aggregate([
                 {
                     $lookup: {
                         from: 'trips',
@@ -990,53 +982,140 @@ const companyController = {
                 },
                 { $unwind: '$tripDetails' },
                 {
-                    $match: matchConditions,
-                },
-                {
-                    $lookup: {
-                        from: 'users',
-                        localField: 'user',
-                        foreignField: '_id',
-                        as: 'userDetails',
+                    $match: {
+                        'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
                     },
                 },
-                { $unwind: '$userDetails' },
+                {
+                    $addFields: {
+                        month: { $month: '$bookingDate' },
+                        year: { $year: '$bookingDate' },
+                    },
+                },
+                {
+                    $group: {
+                        _id: { year: '$year', month: '$month' },
+                        totalBookings: { $sum: 1 },
+                    },
+                },
+                {
+                    $addFields: {
+                        isCurrentMonth: {
+                            $and: [
+                                { $eq: ['$_id.month', currentMonth] },
+                                { $eq: ['$_id.year', currentYear] },
+                            ],
+                        },
+                        isLastMonth: {
+                            $and: [
+                                { $eq: ['$_id.month', lastMonth] },
+                                { $eq: ['$_id.year', lastMonthYear] },
+                            ],
+                        },
+                    },
+                },
+            ]);
+    
+            // Lọc ra số liệu cho tháng hiện tại và tháng trước
+            const currentMonthData = bookingStats.find((item) => item.isCurrentMonth) || { totalBookings: 0 };
+            const lastMonthData = bookingStats.find((item) => item.isLastMonth) || { totalBookings: 0 };
+
+            const userBookings = await Booking.aggregate([
+                // Kết hợp với bảng trips
+                {
+                    $lookup: {
+                        from: "trips",
+                        localField: "trip",
+                        foreignField: "_id",
+                        as: "tripDetails",
+                    },
+                },
+                { $unwind: "$tripDetails" },
+            
+                // Lọc theo companyId
+                {
+                    $match: {
+                        "tripDetails.companyId": new mongoose.Types.ObjectId(companyId),
+                    },
+                },
+            
+                // Kết hợp với bảng users
+                {
+                    $lookup: {
+                        from: "users",
+                        localField: "user",
+                        foreignField: "_id",
+                        as: "userDetails",
+                    },
+                },
+                { $unwind: "$userDetails" },
+            
+                // Thêm trường `isToday` để đánh dấu các bản ghi ngày hiện tại
+                {
+                    $addFields: {
+                        isToday: {
+                            $eq: [
+                                {
+                                    $dateToString: { format: "%Y-%m-%d", date: "$bookingDate" },
+                                },
+                                {
+                                    $dateToString: { format: "%Y-%m-%d", date: new Date() }, // So sánh với ngày hiện tại
+                                },
+                            ],
+                        },
+                    },
+                },
+            
+                // Lựa chọn trường cần thiết
                 {
                     $project: {
                         _id: 1,
-                        user: {
-                            fullName: '$userDetails.fullName',
-                            email: '$userDetails.email',
-                            phoneNumber: '$userDetails.phoneNumber',
-                        },
-                        trip: {
-                            _id: '$tripDetails._id',
-                            departureLocation: '$tripDetails.departureLocation',
-                            arrivalLocation: '$tripDetails.arrivalLocation',
-                            departureTime: '$tripDetails.departureTime',
-                        },
+                        "userDetails.fullName": 1,
+                        "userDetails.phoneNumber": 1,
                         bookingDate: 1,
-                        totalPrice: 1,
                         status: 1,
-                        paymentStatus: 1,
+                        totalPrice: 1,
+                        isToday: 1, // Giữ trường isToday để sắp xếp
                     },
                 },
-                { $sort: { bookingDate: -1 } },
+            
+                // Sắp xếp ưu tiên ngày hiện tại (29) trước, sau đó theo bookingDate
+                {
+                    $sort: {
+                        isToday: -1, // Ưu tiên ngày hiện tại trước (29)
+                        bookingDate: -1, // Sau đó sắp xếp theo ngày đặt vé giảm dần
+                    },
+                },
             ]);
             return res.status(200).json({
                 success: true,
-                message: 'Danh sách đặt vé của công ty đã được lấy thành công.',
-                data: bookings,
+                message: 'Thống kê đặt vé và danh sách người dùng đã được lấy thành công.',
+                data: {
+                    bookingStats: {
+                        currentMonth: {
+                            month: currentMonth,
+                            year: currentYear,
+                            totalBookings: currentMonthData.totalBookings,
+                        },
+                        lastMonth: {
+                            month: lastMonth,
+                            year: lastMonthYear,
+                            totalBookings: lastMonthData.totalBookings,
+                        },
+                        allGroupedBookings: bookingStats, // Gom nhóm theo tháng
+                    },
+                    userBookings: userBookings, // Danh sách người dùng và vé đã đặt
+                },
             });
         } catch (error) {
-            console.error('Lỗi khi lấy danh sách đặt vé của công ty:', error);
+            console.error('Lỗi khi lấy thống kê và danh sách đặt vé:', error);
             return res.status(500).json({
                 success: false,
-                message: 'Lỗi khi lấy danh sách đặt vé của công ty.',
+                message: 'Lỗi khi lấy thống kê và danh sách đặt vé.',
                 error: error.message,
             });
         }
-    },
+    },       
 };
 
 module.exports = companyController;

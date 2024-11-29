@@ -20,6 +20,12 @@ const ScheduleSchema = new mongoose.Schema({
     }
 });
 
+const PointSchema = new mongoose.Schema({
+    time: String,
+    location: String,
+    note: String,
+  });
+
 const TripSchema = new mongoose.Schema({
     departureLocation: {
         type: mongoose.Schema.Types.ObjectId,
@@ -75,7 +81,9 @@ const TripSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Trip',
         default: null
-    }
+    },
+    pickupPoints: [PointSchema],
+    dropOffPoints: [PointSchema],
 }, {
     timestamps: true
 });

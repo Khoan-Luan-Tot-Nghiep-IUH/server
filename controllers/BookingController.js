@@ -312,7 +312,10 @@ exports.paymentSuccess = async (req, res) => {
           await user.save();
         }
 
-        return res.redirect(`${process.env.CLIENT_URL}/user/ticket-buy`);
+        return res.redirect(
+            `${process.env.CLIENT_URL}/user/ticket-buy?success=true&message=Thanh toán thành công!&bookingId=${booking._id}`
+          );
+          
     } catch (error) {
         return res.status(500).json({ success: false, message: 'Lỗi khi xử lý thanh toán', error: error.message });
     }

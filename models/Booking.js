@@ -47,7 +47,7 @@ const BookingSchema = new mongoose.Schema({
         default: null
     },
     isCheckedIn: { type: Boolean, default: false },
-});
+},{ timestamps: true });
 
 const Booking = mongoose.model('Booking', BookingSchema);
 

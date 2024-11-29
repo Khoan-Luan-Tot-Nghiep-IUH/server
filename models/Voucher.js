@@ -7,6 +7,7 @@ const voucherSchema = new mongoose.Schema({
   expiryDate: { type: Date, required: true },
   isUsed: { type: Boolean, default: false },
   type: { type: String, enum: ['system', 'personal'], required: true },
+  quantity: { type: Number, default: 1 },
 });
 
 module.exports = mongoose.model('Voucher', voucherSchema);
