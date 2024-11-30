@@ -2,6 +2,14 @@ const express = require('express');
 const router = express.Router();
 const companyController = require('../controllers/CompanyController');
 const authMiddleware = require('../middleware/authMiddleware');
+const userV2Controller = require('../controllers/userV2Controller')
+
+// View trip requests for the company
+router.get('/trip-requests', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, userV2Controller.getCompanyTripRequests);
+router.patch('/trip-requests/:requestId/approve',authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,userV2Controller.approveTripRequest);
+router.patch('/trip-requests/:requestId/reject',authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,userV2Controller.rejectTripRequest);
+
+
 
 router.post('/', authMiddleware.verifyToken, authMiddleware.isSuperAdmin, companyController.createCompany);
 router.post('/add-admin', authMiddleware.verifyToken, authMiddleware.isSuperAdmin, companyController.addCompanyAdmin);

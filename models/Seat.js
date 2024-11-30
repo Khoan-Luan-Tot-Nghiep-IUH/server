@@ -24,7 +24,7 @@ const SeatSchema = new mongoose.Schema({
     },
     seatRow: {
         type: String,
-        enum: ['Front', 'Middle', 'Back'], // Hàng đầu, giữa, cuối
+        enum: ['Front', 'Middle', 'Back'],
         required: true
     },
     floor: {

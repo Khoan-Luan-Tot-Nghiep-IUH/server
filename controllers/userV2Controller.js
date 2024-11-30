@@ -8,6 +8,7 @@ const Company = require('../models/Company');
 const BusType = require('../models/BusType');
 const moment = require('moment-timezone');
 const Seat = require('../models/Seat'); 
+const Trip = require('../models/Trip');
 
 
 // mở + lấy + hủy yêu cầu chuyến đi gửi đến công ty
@@ -185,6 +186,187 @@ exports.cancelTripRequest = async (req, res) => {
     }
 };
 
+// hàm lấy / thao tác của người dùng người dùng khi chuyến đi 
+exports.getCompanyTripRequests = async (req, res) => {
+    try {
+        const companyId = req.user.companyId; 
+        const tripRequests = await TripRequest.find({ companyId })
+            .populate('departureLocation', 'name address')
+            .populate('arrivalLocation', 'name address')
+            .populate('userId', 'fullName email phone')
+            .populate('busType', 'name seats floorCount')
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({
+            success: true,
+            data: tripRequests,
+        });
+    } catch (error) {
+        console.error('Error fetching trip requests for company:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lấy danh sách yêu cầu chuyến đi thất bại.',
+            error: error.message,
+        });
+    }
+};
+
+exports.approveTripRequest = async (req, res) => {
+    try {
+        const { requestId } = req.params;
+        const { basePrice, pickupPoints, dropOffPoints } = req.body;
+
+        // Tìm yêu cầu chuyến đi
+        const tripRequest = await TripRequest.findById(requestId).populate('departureLocation arrivalLocation busType');
+        if (!tripRequest) {
+            return res.status(404).json({
+                success: false,
+                message: 'Yêu cầu chuyến đi không tồn tại.',
+            });
+        }
+
+        if (tripRequest.status !== 'Pending') {
+            return res.status(400).json({
+                success: false,
+                message: 'Yêu cầu chuyến đi này đã được xử lý.',
+            });
+        }
+
+        // Kiểm tra thông tin cần thiết
+        if (!tripRequest.departureLocation || !tripRequest.arrivalLocation || !tripRequest.busType) {
+            return res.status(400).json({
+                success: false,
+                message: 'Yêu cầu chuyến đi thiếu thông tin địa điểm hoặc loại xe.',
+            });
+        }
+
+        if (!basePrice || !Array.isArray(pickupPoints) || !Array.isArray(dropOffPoints)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Thiếu thông tin giá hoặc điểm đón/trả.',
+            });
+        }
+
+        // Tạo chuyến đi mới từ thông tin yêu cầu
+        const newTrip = new Trip({
+            departureLocation: tripRequest.departureLocation._id,
+            arrivalLocation: tripRequest.arrivalLocation._id,
+            departureTime: tripRequest.preferredDepartureTime,
+            arrivalTime: moment(tripRequest.preferredDepartureTime).add(5, 'hours').toDate(), // Giả định thời gian đến là 5 giờ
+            busType: tripRequest.busType._id,
+            basePrice,
+            companyId: tripRequest.companyId,
+            pickupPoints,
+            dropOffPoints,
+        });
+
+        // Lưu chuyến đi
+        await newTrip.save();
+
+        // **Sinh ghế tự động dựa vào thông tin loại xe**
+        const seats = [];
+        const busType = tripRequest.busType; // Loại xe
+        const totalSeats = busType.seats; // Tổng số ghế trong xe
+        let seatNumber = 1;
+
+        // Xác định số tầng và các hàng ghế
+        const floorCount = busType.floorCount || 1;
+        const seatRows = ['Front', 'Middle', 'Back'];
+
+        for (let floor = 1; floor <= floorCount; floor++) {
+            for (const row of seatRows) {
+                const seatsInRow = Math.ceil(totalSeats / (seatRows.length * floorCount));
+                for (let i = 0; i < seatsInRow; i++) {
+                    if (seatNumber > totalSeats) break;
+
+                    // Xác định thông tin ghế
+                    const isVIP = [1, 2, 3, 4].includes(seatNumber); // Quy định ghế VIP
+                    const isAvailable = seatNumber !== 1; // Ghế số 1 không khả dụng
+
+                    seats.push({
+                        trip: newTrip._id,
+                        seatNumber: seatNumber++,
+                        isAvailable,
+                        isVIP,
+                        price: isVIP ? basePrice * 1.5 : basePrice,
+                        seatRow: row,
+                        floor,
+                        bookedBy: null,
+                        reservedAt: null,
+                        isLocked: false,
+                        lockedBy: null,
+                        version: 0,
+                        lockExpiration: null,
+                    });
+                }
+            }
+        }
+
+        // Lưu danh sách ghế vào bảng `Seat`
+        await Seat.insertMany(seats);
+
+        // Cập nhật trạng thái yêu cầu chuyến đi
+        tripRequest.status = 'Approved';
+        tripRequest.tripId = newTrip._id;
+        await tripRequest.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Yêu cầu chuyến đi đã được duyệt và chuyến đi đã được tạo thành công, bao gồm danh sách ghế.',
+            data: {
+                trip: newTrip,
+                seats,
+            },
+        });
+    } catch (error) {
+        console.error('Error approving trip request:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Không thể duyệt yêu cầu chuyến đi.',
+            error: error.message,
+        });
+    }
+};
+
+exports.rejectTripRequest = async (req, res) => {
+    try {
+        const { requestId } = req.params;
+        const { reason } = req.body;
+        const companyId = req.user.companyId; 
+
+        const tripRequest = await TripRequest.findOne({ _id: requestId, companyId });
+        if (!tripRequest) {
+            return res.status(404).json({
+                success: false,
+                message: 'Yêu cầu không tồn tại hoặc không thuộc quyền quản lý của công ty.',
+            });
+        }
+
+        if (tripRequest.status !== 'Pending') {
+            return res.status(400).json({
+                success: false,
+                message: 'Yêu cầu này không thể từ chối vì nó đã được xử lý.',
+            });
+        }
+
+        tripRequest.status = 'Rejected';
+        tripRequest.rejectionReason = reason || 'Không có lý do cụ thể.';
+        await tripRequest.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Yêu cầu chuyến đi đã bị từ chối.',
+            data: tripRequest,
+        });
+    } catch (error) {
+        console.error('Error rejecting trip request:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Từ chối yêu cầu thất bại.',
+            error: error.message,
+        });
+    }
+};
 
 
 
@@ -213,8 +395,6 @@ exports.getCompanyNames = async (req, res) => {
         });
     }
 };
-
-
 exports.getBusTypesByCompany = async (req, res) => {
     try {
         const { companyId } = req.params;

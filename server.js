@@ -17,7 +17,7 @@ connectDB(); // Kết nối tới cơ sở dữ liệu
 
 app.use(cors({
     origin: "*" || "http://localhost:3000",
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE','PATCH',],
 }));
 
 // app.use(cors({
