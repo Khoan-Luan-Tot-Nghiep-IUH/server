@@ -151,4 +151,83 @@ const verifyPasswordResetCode = async (identifier, code) => {
         return 'denied';
     }
 };
-module.exports = { verifyPasswordResetCode,sendOrderConfirmationEmail, sendVerificationEmail,sendPasswordResetEmail ,verifyCodeEmail };
+
+
+const sendPurchaseConfirmationEmail = async (email, orderDetails) => {
+    const subject = 'Xác nhận đơn hàng từ VeXeOnline';
+    const { orderCode, departurePoint, destinationPoint, seatNumbers, totalPrice, paymentMethod, paymentLink } = orderDetails;
+
+    const formattedTotalPrice = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalPrice);
+
+    const htmlContent = `
+    <div style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <!-- Header -->
+            <div style="background-color: #2474E5; padding: 20px; text-align: center; color: white;">
+                <h1 style="margin: 0;">Xác nhận đơn hàng</h1>
+            </div>
+            <!-- Content -->
+            <div style="padding: 20px; text-align: left;">
+                <p>Chào bạn,</p>
+                <p>Cảm ơn bạn đã đặt vé tại <strong>VeXeOnline</strong>!</p>
+                <p>Dưới đây là thông tin chi tiết đơn hàng của bạn:</p>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold; width: 150px;">Mã đơn hàng:</td>
+                        <td style="padding: 8px;">${orderCode}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Điểm đi:</td>
+                        <td style="padding: 8px;">${departurePoint}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Điểm đến:</td>
+                        <td style="padding: 8px;">${destinationPoint}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Ghế đã đặt:</td>
+                        <td style="padding: 8px;">${seatNumbers.join(', ')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Tổng tiền:</td>
+                        <td style="padding: 8px; color: #D9534F; font-weight: bold;">${formattedTotalPrice}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Phương thức thanh toán:</td>
+                        <td style="padding: 8px;">${paymentMethod === 'Online' ? 'Thanh toán trực tuyến' : 'Thanh toán trên xe'}</td>
+                    </tr>
+                </table>
+                ${
+                  paymentMethod === 'Online'
+                    ? `
+                    <p style="margin-top: 20px;"><strong>Trạng thái:</strong> Chờ thanh toán</p>
+                    <p>Vui lòng nhấn vào link dưới đây để tiến hành thanh toán:</p>
+                    <a href="${paymentLink}" style="display: inline-block; background-color: #2474E5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; margin-top: 10px;">Thanh toán ngay</a>
+                    `
+                    : `
+                    <p style="margin-top: 20px;"><strong>Trạng thái:</strong> Đã xác nhận</p>
+                    <p>Vui lòng thanh toán trực tiếp khi lên xe.</p>
+                    `
+                }
+                <p style="margin-top: 20px;">Nếu bạn có bất kỳ thắc mắc nào, vui lòng liên hệ với chúng tôi qua email hoặc số điện thoại hỗ trợ.</p>
+            </div>
+            <!-- Footer -->
+            <div style="background-color: #f4f4f4; padding: 10px; text-align: center; font-size: 12px; color: #666;">
+                <p>© 2024 VeXeOnline. Mọi quyền được bảo lưu.</p>
+                <p>Cảm ơn bạn đã sử dụng dịch vụ của chúng tôi.</p>
+            </div>
+        </div>
+    </div>
+    `;
+
+    try {
+        await sendOrderConfirmationEmail(email, subject, htmlContent);
+        console.log('Email xác nhận mua hàng đã được gửi thành công');
+    } catch (error) {
+        console.error('Lỗi gửi email:', error.message);
+        throw new Error('Không thể gửi email xác nhận đơn hàng.');
+    }
+};
+
+
+module.exports = { sendPurchaseConfirmationEmail,verifyPasswordResetCode,sendOrderConfirmationEmail, sendVerificationEmail,sendPasswordResetEmail ,verifyCodeEmail };

@@ -13,6 +13,7 @@ const payOS = new PayOS(
 );
 const crypto = require('crypto');
 const Voucher = require('../models/Voucher');
+const { sendPurchaseConfirmationEmail } = require('../config/mailer');
 
 
 exports.getBookingDrafts = async (req, res) => {
@@ -170,7 +171,9 @@ exports.createBooking = async (req, res) => {
     try {
       const { bookingId, paymentMethod, voucherCode } = req.body; 
       const userId = req.user._id;
-  
+      const userEmail = req.user.email;
+
+      
       const bookingDraft = await Booking.findOne({
         _id: bookingId,
         user: userId,
@@ -190,9 +193,9 @@ exports.createBooking = async (req, res) => {
           throw new Error('Voucher không tồn tại, đã hết hạn hoặc đã được sử dụng');
         }
   
-        // Áp dụng giảm giá từ voucher vào tổng giá trị đơn hàng
         discountAmount = voucher.discount;
-        voucher.isUsed = true; // Đánh dấu voucher là đã sử dụng
+        voucher.quantity -= 1;
+        voucher.isUsed = true; 
         await voucher.save({ session });
       }
   
@@ -242,7 +245,17 @@ exports.createBooking = async (req, res) => {
         }
       }
       
-  
+      let paymentLink = null; 
+      const tripDetails = await Trip.findById(bookingDraft.trip)
+      .populate('departureLocation') 
+      .populate('arrivalLocation') 
+      .exec();
+
+  if (!tripDetails) {
+      throw new Error('Không tìm thấy thông tin chuyến đi');
+  }
+  const departurePoint = tripDetails.departureLocation.name;
+  const destinationPoint = tripDetails.arrivalLocation.name;
       if (paymentMethod === 'Online') {
         const paymentItems = bookingDraft.seatNumbers.map(seatNumber => {
           const seatInfo = seats.find(s => s.seatNumber === seatNumber);
@@ -262,9 +275,19 @@ exports.createBooking = async (req, res) => {
 
         };
         const paymentLinkResponse = await payOS.createPaymentLink(paymentLinkRequest);
-  
-        if (paymentLinkResponse.checkoutUrl) {
+        paymentLink = paymentLinkResponse.checkoutUrl
+        if (paymentLinkResponse.checkoutUrl) {  
           await session.commitTransaction();
+          await sendPurchaseConfirmationEmail(userEmail, {
+            orderCode: bookingDraft.orderCode,
+            trip: bookingDraft.trip,
+            seatNumbers: bookingDraft.seatNumbers,
+            totalPrice: bookingDraft.totalPrice,
+            paymentMethod: bookingDraft.paymentMethod,
+            paymentLink,
+            departurePoint,
+            destinationPoint 
+        });
           return res.status(200).json({
             success: true,
             data: {
@@ -277,9 +300,26 @@ exports.createBooking = async (req, res) => {
         } else {
           throw new Error('Lỗi tạo link thanh toán PayOS hoặc không có checkoutUrl trong phản hồi.');
         }
+        paymentLink = paymentLinkResponse.checkoutUrl;
       }
       
       await session.commitTransaction();
+      try {
+        await sendPurchaseConfirmationEmail(userEmail, {
+            orderCode: bookingDraft.orderCode,
+            trip: bookingDraft.trip,
+            seatNumbers: bookingDraft.seatNumbers,
+            totalPrice: bookingDraft.totalPrice,
+            paymentMethod: bookingDraft.paymentMethod,
+            paymentLink,
+            departurePoint,
+            destinationPoint 
+        });
+        console.log('Payment link:', paymentLink);
+    } catch (emailError) {
+        console.error('Lỗi gửi email:', emailError.message);
+    }
+
       res.status(200).json({ success: true, data: bookingDraft });
   
     } catch (error) {
@@ -290,7 +330,7 @@ exports.createBooking = async (req, res) => {
     } finally {
       session.endSession();
     }
-  };
+};
 
 exports.paymentSuccess = async (req, res) => {
     

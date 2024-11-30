@@ -4,13 +4,10 @@ const Seat = require('./models/Seat');
 module.exports = (io) => {
     const connectedUsers = new Map();
     io.on('connection', (socket) => {
-        console.log('User connected:', socket.id);
         socket.on('joinTrip', (tripId) => {
             socket.join(`trip:${tripId}`);
-            console.log(`Socket ${socket.id} joined trip room: trip:${tripId}`);
           });          
         socket.on('reserveSeat', async ({ tripId, seatNumber, userId }) => {
-            console.log('Attempting to reserve seat:', { tripId, seatNumber, userId });
             const session = await mongoose.startSession();
             try {
                 await session.withTransaction(async () => {
@@ -116,7 +113,6 @@ module.exports = (io) => {
         });
 
         socket.on('disconnect', async () => {
-            console.log('User disconnected:', socket.id);
             const userData = connectedUsers.get(socket.id);
             if (userData?.lockedSeats?.length) {
                 const session = await mongoose.startSession();
