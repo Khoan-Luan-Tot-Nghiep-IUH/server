@@ -7,6 +7,9 @@ router.post('/create', authMiddleware.verifyToken,authMiddleware.isSuperAdmin,vo
 //quyy đổi điểm
 router.post('/redeem', authMiddleware.verifyToken,voucherController.redeemPointsForVoucher);
 
+router.get('/loyalty-points', authMiddleware.verifyToken,voucherController.getUserLoyaltyPoints);
+
+
 router.get('/user-vouchers',authMiddleware.verifyToken,voucherController.getAllVouchers);
 router.get('/:id', voucherController.getVoucherById);
 router.delete('/:id', voucherController.deleteVoucher);

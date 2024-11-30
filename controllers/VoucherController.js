@@ -2,6 +2,24 @@ const Voucher = require('../models/Voucher');
 const User = require('../models/User');
 const slugify = require('slugify');
 
+
+const getUserLoyaltyPoints = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const user = await User.findById(userId).select('loyaltyPoints');
+    if (!user) {
+      return res.status(404).json({ message: 'Người dùng không tồn tại' });
+    }
+
+    res.status(200).json({ message: 'Lấy điểm thành công', loyaltyPoints: user.loyaltyPoints });
+  } catch (error) {
+    console.error('Error fetching user loyalty points:', error);
+    res.status(500).json({ message: 'Lỗi khi lấy điểm người dùng', error });
+  }
+};
+
+
 //đổi điểm 100 điểm = 10% voucher!
 const redeemPointsForVoucher = async (req, res) => {
   try {
@@ -180,6 +198,7 @@ const deleteVoucher = async (req, res) => {
 };
 
 module.exports = {
+  getUserLoyaltyPoints,
   createVoucher,
   applyVoucher,
   getAllVouchers,

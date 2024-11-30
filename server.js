@@ -67,7 +67,7 @@ const RevenueRoutes = require('./routes/RevenueRoutes');
 const voucherRoutes = require('./routes/voucherRoutes');
 const GlobalNotification = require('./routes/GlobalRoutes');
 
-require('./utils/cron');
+// require('./utils/cron');
 
 
 
