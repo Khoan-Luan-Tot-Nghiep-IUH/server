@@ -2,7 +2,13 @@ const express = require('express');
 const router = express.Router();
 const companyController = require('../controllers/CompanyController');
 const authMiddleware = require('../middleware/authMiddleware');
-const userV2Controller = require('../controllers/userV2Controller')
+const userV2Controller = require('../controllers/userV2Controller');
+const ExpenseController = require('../controllers/ExpenseController')
+
+// Cập nhật trạng thái phiếu chi phí
+router.get('/expenses',authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,ExpenseController.getCompanyExpenses);
+router.patch('/expenses/:expenseId/status',authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,ExpenseController.updateExpenseStatus);
+router.get('/expenses/comparison', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.getCompanyExpenseComparison);
 
 // View trip requests for the company
 router.get('/trip-requests', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, userV2Controller.getCompanyTripRequests);
@@ -33,7 +39,8 @@ router.get('/notifications', authMiddleware.verifyToken, authMiddleware.isCompan
 
 // Route mới: Lấy danh sách đặt vé của công ty
 router.get('/bookings', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.getBookingStatsAndUsers);
-
+router.get('/revenue/comparison', authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,companyController.getRevenueComparison);
+router.get("/cancelled-stats", authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,companyController.getCancelledBookingsStats);
 
 // tôi chưa gọi 3 hàm này
 router.get('/export-revenue', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.exportRevenueToExcel);

@@ -1,5 +1,23 @@
 const SystemSetting = require('../models/SystemSetting');
 
+
+exports.generateNewUserVoucher = async (user) => {
+    const setting = await SystemSetting.findOne();
+  
+    if (setting && setting.allowNewUserVoucher) {
+      const voucher = new Voucher({
+        code: `NEWUSER50-${user._id}`,
+        userId: user._id,
+        discount: 50,
+        expiryDate: new Date(new Date().setMonth(new Date().getMonth() + 1)),
+        type: 'personal',
+        quantity: 1,
+      });
+  
+      await voucher.save();
+    }
+  };
+
 exports.toggleNewUserVoucher = async (req, res) => {
     try {
         if (req.user.roleId !== 'superadmin') {

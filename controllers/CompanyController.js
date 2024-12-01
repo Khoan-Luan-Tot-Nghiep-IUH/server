@@ -11,6 +11,9 @@ const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
 const Notification = require('../models/Notification');
+
+const Expense = require('../models/Expense'); 
+
 const companyController = {
     createCompany: async (req, res) => {
         try {
@@ -516,7 +519,7 @@ const companyController = {
     },           
     calculateAndRecordDriverSalary: async (req, res) => {
         try {
-            const { userId, startDate, endDate } = req.body;
+            const { userId, startDate, endDate, bonuses = 0, deductions = 0 } = req.body;
     
             // Tìm người dùng với userId được cung cấp
             const user = await User.findById(userId);
@@ -545,20 +548,24 @@ const companyController = {
             const tripsInPeriod = driver.completedTrips.filter(trip => {
                 return trip.departureTime >= new Date(startDate) && trip.departureTime <= new Date(endDate);
             });
-            
-            const tripEarnings = tripsInPeriod.length * driver.salaryRate; 
-            const totalSalary = driver.baseSalary + tripEarnings;
     
+            const tripEarnings = tripsInPeriod.length * driver.salaryRate; 
+            const totalSalary = driver.baseSalary + tripEarnings + bonuses - deductions;
+    
+            // Lưu thông tin lương vào bảng SalaryRecord
             const salaryRecord = new SalaryRecord({
                 driverId: driver._id,
                 startDate,
                 endDate,
                 baseSalary: driver.baseSalary,
                 tripEarnings,
-                totalSalary
+                bonuses,
+                deductions,
+                totalSalary // Tính tổng lương bao gồm thưởng và khấu trừ
             });
             await salaryRecord.save();
     
+            // Xóa các chuyến đi đã tính lương ra khỏi danh sách completedTrips của tài xế
             const tripIdsToRemove = tripsInPeriod.map(trip => trip._id);
             await Driver.findByIdAndUpdate(driver._id, {
                 $pull: { completedTrips: { $in: tripIdsToRemove } }
@@ -963,15 +970,31 @@ const companyController = {
                 });
             }
     
-            // Tính toán thời gian
+            // Tính toán thời gian cho tháng hiện tại và tháng trước
             const today = new Date();
             const currentMonth = today.getMonth() + 1;
             const currentYear = today.getFullYear();
             const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
             const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
     
-            // Aggregation để gom nhóm theo tháng và năm
+            // Tạo khoảng thời gian với UTC
+            const startOfLastMonth = new Date(Date.UTC(lastMonthYear, lastMonth - 1, 1));
+            const endOfCurrentMonth = new Date(Date.UTC(currentYear, currentMonth, 0, 23, 59, 59));
+    
+            // Aggregation để lấy thống kê booking
             const bookingStats = await Booking.aggregate([
+                {
+                    $addFields: {
+                        // Chuyển đổi bookingDate từ chuỗi sang Date nếu cần
+                        bookingDate: {
+                            $cond: {
+                                if: { $eq: [{ $type: "$bookingDate" }, "string"] },
+                                then: { $dateFromString: { dateString: "$bookingDate" } },
+                                else: "$bookingDate"
+                            }
+                        }
+                    }
+                },
                 {
                     $lookup: {
                         from: 'trips',
@@ -984,6 +1007,10 @@ const companyController = {
                 {
                     $match: {
                         'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
+                        bookingDate: {
+                            $gte: startOfLastMonth,
+                            $lte: endOfCurrentMonth,
+                        },
                     },
                 },
                 {
@@ -998,95 +1025,93 @@ const companyController = {
                         totalBookings: { $sum: 1 },
                     },
                 },
-                {
-                    $addFields: {
-                        isCurrentMonth: {
-                            $and: [
-                                { $eq: ['$_id.month', currentMonth] },
-                                { $eq: ['$_id.year', currentYear] },
-                            ],
-                        },
-                        isLastMonth: {
-                            $and: [
-                                { $eq: ['$_id.month', lastMonth] },
-                                { $eq: ['$_id.year', lastMonthYear] },
-                            ],
-                        },
-                    },
-                },
+                { $sort: { '_id.year': 1, '_id.month': 1 } },
             ]);
     
-            // Lọc ra số liệu cho tháng hiện tại và tháng trước
-            const currentMonthData = bookingStats.find((item) => item.isCurrentMonth) || { totalBookings: 0 };
-            const lastMonthData = bookingStats.find((item) => item.isLastMonth) || { totalBookings: 0 };
-
+            const currentMonthData =
+                bookingStats.find(
+                    (item) =>
+                        item._id.year === currentYear && item._id.month === currentMonth
+                ) || { totalBookings: 0 };
+    
+            const lastMonthData =
+                bookingStats.find(
+                    (item) =>
+                        item._id.year === lastMonthYear && item._id.month === lastMonth
+                ) || { totalBookings: 0 };
+    
+            // Query danh sách booking
             const userBookings = await Booking.aggregate([
-                // Kết hợp với bảng trips
+                {
+                    $addFields: {
+                        // Chuyển đổi bookingDate từ chuỗi sang Date nếu cần
+                        bookingDate: {
+                            $cond: {
+                                if: { $eq: [{ $type: "$bookingDate" }, "string"] },
+                                then: { $dateFromString: { dateString: "$bookingDate" } },
+                                else: "$bookingDate"
+                            }
+                        }
+                    }
+                },
                 {
                     $lookup: {
-                        from: "trips",
-                        localField: "trip",
-                        foreignField: "_id",
-                        as: "tripDetails",
+                        from: 'trips',
+                        localField: 'trip',
+                        foreignField: '_id',
+                        as: 'tripDetails',
                     },
                 },
-                { $unwind: "$tripDetails" },
-            
-                // Lọc theo companyId
+                { $unwind: '$tripDetails' },
                 {
                     $match: {
-                        "tripDetails.companyId": new mongoose.Types.ObjectId(companyId),
+                        'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
+                        bookingDate: {
+                            $gte: startOfLastMonth,
+                            $lte: endOfCurrentMonth,
+                        },
                     },
                 },
-            
-                // Kết hợp với bảng users
                 {
                     $lookup: {
-                        from: "users",
-                        localField: "user",
-                        foreignField: "_id",
-                        as: "userDetails",
+                        from: 'users',
+                        localField: 'user',
+                        foreignField: '_id',
+                        as: 'userDetails',
                     },
                 },
-                { $unwind: "$userDetails" },
-            
-                // Thêm trường `isToday` để đánh dấu các bản ghi ngày hiện tại
+                { $unwind: '$userDetails' },
                 {
                     $addFields: {
                         isToday: {
                             $eq: [
-                                {
-                                    $dateToString: { format: "%Y-%m-%d", date: "$bookingDate" },
-                                },
-                                {
-                                    $dateToString: { format: "%Y-%m-%d", date: new Date() }, // So sánh với ngày hiện tại
-                                },
+                                { $dateToString: { format: '%Y-%m-%d', date: '$bookingDate' } },
+                                { $dateToString: { format: '%Y-%m-%d', date: new Date() } },
                             ],
                         },
                     },
                 },
-            
-                // Lựa chọn trường cần thiết
                 {
                     $project: {
                         _id: 1,
-                        "userDetails.fullName": 1,
-                        "userDetails.phoneNumber": 1,
+                        'userDetails.fullName': 1,
+                        'userDetails.phoneNumber': 1,
                         bookingDate: 1,
+                        paymentStatus:1,
                         status: 1,
                         totalPrice: 1,
-                        isToday: 1, // Giữ trường isToday để sắp xếp
+                        isToday: 1,
+                        paymentMethod:1,
                     },
                 },
-            
-                // Sắp xếp ưu tiên ngày hiện tại (29) trước, sau đó theo bookingDate
                 {
                     $sort: {
-                        isToday: -1, // Ưu tiên ngày hiện tại trước (29)
-                        bookingDate: -1, // Sau đó sắp xếp theo ngày đặt vé giảm dần
+                        isToday: -1,
+                        bookingDate: -1,
                     },
                 },
             ]);
+    
             return res.status(200).json({
                 success: true,
                 message: 'Thống kê đặt vé và danh sách người dùng đã được lấy thành công.',
@@ -1102,9 +1127,8 @@ const companyController = {
                             year: lastMonthYear,
                             totalBookings: lastMonthData.totalBookings,
                         },
-                        allGroupedBookings: bookingStats, // Gom nhóm theo tháng
                     },
-                    userBookings: userBookings, // Danh sách người dùng và vé đã đặt
+                    userBookings,
                 },
             });
         } catch (error) {
@@ -1115,7 +1139,328 @@ const companyController = {
                 error: error.message,
             });
         }
-    },       
-};
+    },    
+
+    getRevenueComparison: async (req, res) => {
+        try {
+            const companyId = req.user.companyId;
+    
+            if (!companyId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Yêu cầu phải có mã công ty hợp lệ.',
+                });
+            }
+    
+            // Tính toán thời gian cho tháng hiện tại, tháng trước và tháng trước nữa
+            const today = new Date();
+            const currentMonth = today.getMonth() + 1;
+            const currentYear = today.getFullYear();
+            const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+            const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+            const twoMonthsAgo = lastMonth === 1 ? 12 : lastMonth - 1;
+            const twoMonthsAgoYear = lastMonth === 1 ? lastMonthYear - 1 : lastMonthYear;
+    
+            const startOfCurrentMonth = new Date(Date.UTC(currentYear, currentMonth - 1, 1));
+            const endOfCurrentMonth = new Date(Date.UTC(currentYear, currentMonth, 0, 23, 59, 59));
+    
+            const startOfLastMonth = new Date(Date.UTC(lastMonthYear, lastMonth - 1, 1));
+            const endOfLastMonth = new Date(Date.UTC(lastMonthYear, lastMonth, 0, 23, 59, 59));
+    
+            const startOfTwoMonthsAgo = new Date(Date.UTC(twoMonthsAgoYear, twoMonthsAgo - 1, 1));
+            const endOfTwoMonthsAgo = new Date(Date.UTC(twoMonthsAgoYear, twoMonthsAgo, 0, 23, 59, 59));
+    
+            // Aggregation để tính doanh thu theo tháng
+            const revenueStats = await Booking.aggregate([
+                {
+                    $addFields: {
+                        bookingDate: {
+                            $cond: {
+                                if: { $eq: [{ $type: "$bookingDate" }, "string"] },
+                                then: { $dateFromString: { dateString: "$bookingDate" } },
+                                else: "$bookingDate",
+                            },
+                        },
+                    },
+                },
+                {
+                    $lookup: {
+                        from: 'trips',
+                        localField: 'trip',
+                        foreignField: '_id',
+                        as: 'tripDetails',
+                    },
+                },
+                { $unwind: '$tripDetails' },
+                {
+                    $match: {
+                        'tripDetails.companyId': new mongoose.Types.ObjectId(companyId),
+                        paymentStatus: 'Paid', // Chỉ tính doanh thu đã thanh toán
+                    },
+                },
+                {
+                    $addFields: {
+                        month: { $month: '$bookingDate' },
+                        year: { $year: '$bookingDate' },
+                    },
+                },
+                {
+                    $group: {
+                        _id: { year: '$year', month: '$month' },
+                        totalRevenue: { $sum: '$totalPrice' },
+                    },
+                },
+                { $sort: { '_id.year': 1, '_id.month': 1 } },
+            ]);
+    
+            // Lấy doanh thu cho từng tháng
+            const lastMonthData =
+            revenueStats.find(
+                (item) =>
+                    item._id.year === lastMonthYear && item._id.month === lastMonth
+            ) || { totalRevenue: 0 };
+        
+        const currentMonthData =
+            revenueStats.find(
+                (item) =>
+                    item._id.year === currentYear && item._id.month === currentMonth
+            ) || { totalRevenue: 0 };
+    
+            const twoMonthsAgoData =
+                revenueStats.find(
+                    (item) =>
+                        item._id.year === twoMonthsAgoYear && item._id.month === twoMonthsAgo
+                ) || { totalRevenue: 0 };
+    
+                const revenueChange = lastMonthData.totalRevenue
+                ? ((currentMonthData.totalRevenue - lastMonthData.totalRevenue) /
+                      lastMonthData.totalRevenue) *
+                  100
+                : 0;
+            
+    
+            // Trả về kết quả
+            return res.status(200).json({
+                success: true,
+                message: 'Thống kê doanh thu so sánh đã được tính toán thành công.',
+                data: {
+                    currentMonth: currentMonthData.totalRevenue,
+                    previousMonth: lastMonthData.totalRevenue,
+                    twoMonthsAgo: twoMonthsAgoData.totalRevenue,
+                    revenueChange: revenueChange.toFixed(2), // Làm tròn 2 chữ số thập phân
+                },
+            });
+        } catch (error) {
+            console.error('Lỗi khi lấy thống kê doanh thu:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Lỗi khi lấy thống kê doanh thu.',
+                error: error.message,
+            });
+        }
+    },
+    getCancelledBookingsStats : async (req, res) => {
+        try {
+            const companyId = req.user.companyId;
+    
+            if (!companyId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Yêu cầu phải có mã công ty hợp lệ.",
+                });
+            }
+    
+            // Tính thời gian cho tháng hiện tại và tháng trước
+            const today = new Date();
+            const currentMonth = today.getMonth() + 1;
+            const currentYear = today.getFullYear();
+            const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+            const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+    
+            const startOfCurrentMonth = new Date(Date.UTC(currentYear, currentMonth - 1, 1));
+            const endOfCurrentMonth = new Date(Date.UTC(currentYear, currentMonth, 0, 23, 59, 59));
+    
+            const startOfLastMonth = new Date(Date.UTC(lastMonthYear, lastMonth - 1, 1));
+            const endOfLastMonth = new Date(Date.UTC(lastMonthYear, lastMonth, 0, 23, 59, 59));
+    
+            // Aggregation để tính số lượt hủy
+            const cancelledStats = await Booking.aggregate([
+                {
+                    $addFields: {
+                        bookingDate: {
+                            $cond: {
+                                if: { $eq: [{ $type: "$bookingDate" }, "string"] },
+                                then: { $dateFromString: { dateString: "$bookingDate" } },
+                                else: "$bookingDate",
+                            },
+                        },
+                    },
+                },
+                {
+                    $lookup: {
+                        from: "trips",
+                        localField: "trip",
+                        foreignField: "_id",
+                        as: "tripDetails",
+                    },
+                },
+                { $unwind: "$tripDetails" },
+                {
+                    $match: {
+                        "tripDetails.companyId": new mongoose.Types.ObjectId(companyId),
+                        status: "Cancelled", // Chỉ đếm những booking bị hủy
+                    },
+                },
+                {
+                    $facet: {
+                        currentMonth: [
+                            {
+                                $match: {
+                                    bookingDate: {
+                                        $gte: startOfCurrentMonth,
+                                        $lte: endOfCurrentMonth,
+                                    },
+                                },
+                            },
+                            { $count: "count" },
+                        ],
+                        lastMonth: [
+                            {
+                                $match: {
+                                    bookingDate: {
+                                        $gte: startOfLastMonth,
+                                        $lte: endOfLastMonth,
+                                    },
+                                },
+                            },
+                            { $count: "count" },
+                        ],
+                    },
+                },
+            ]);
+    
+            const currentMonthCount =
+                cancelledStats[0]?.currentMonth[0]?.count || 0;
+            const lastMonthCount =
+                cancelledStats[0]?.lastMonth[0]?.count || 0;
+    
+            return res.status(200).json({
+                success: true,
+                message: "Thống kê số lượt hủy vé đã được tính toán thành công.",
+                data: {
+                    currentMonth: currentMonthCount,
+                    lastMonth: lastMonthCount,
+                },
+            });
+        } catch (error) {
+            console.error("Lỗi khi lấy thống kê số lượt hủy vé:", error);
+            return res.status(500).json({
+                success: false,
+                message: "Lỗi khi lấy thống kê số lượt hủy vé.",
+                error: error.message,
+            });
+        }
+    },    
+    getCompanyExpenseComparison : async (req, res) => {
+        try {
+            const companyId = req.user.companyId;
+    
+            if (!companyId) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Công ty không tồn tại hoặc không hợp lệ.',
+                });
+            }
+    
+            // Lấy ngày hiện tại và tính toán thời gian đầu tháng
+            const today = new Date();
+            const currentMonth = today.getMonth(); // Tháng hiện tại (0-11)
+            const currentYear = today.getFullYear(); // Năm hiện tại
+    
+            // Tính thời gian đầu tháng trước
+            const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1; // Nếu tháng hiện tại là 0 (tháng 1), thì tháng trước là 11 (tháng 12)
+            const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    
+            // Tạo khoảng thời gian cần so sánh
+            const startOfCurrentMonth = new Date(Date.UTC(currentYear, currentMonth, 1)); // Đầu tháng hiện tại
+            const startOfLastMonth = new Date(Date.UTC(lastMonthYear, lastMonth, 1)); // Đầu tháng trước
+            const endOfLastMonth = new Date(Date.UTC(currentYear, currentMonth, 0, 23, 59, 59)); // Cuối tháng trước
+    
+            // Aggregation để tính tổng chi phí tháng này
+            const currentMonthExpenses = await Expense.aggregate([
+                {
+                    $lookup: {
+                        from: 'drivers',
+                        localField: 'driverId',
+                        foreignField: '_id',
+                        as: 'driverDetails',
+                    },
+                },
+                {
+                    $match: {
+                        'driverDetails.companyId': new mongoose.Types.ObjectId(companyId),
+                        createdAt: { $gte: startOfCurrentMonth },
+                    },
+                },
+                {
+                    $group: {
+                        _id: null,
+                        totalExpenses: { $sum: '$amount' },
+                    },
+                },
+            ]);
+    
+            // Aggregation để tính tổng chi phí tháng trước
+            const lastMonthExpenses = await Expense.aggregate([
+                {
+                    $lookup: {
+                        from: 'drivers',
+                        localField: 'driverId',
+                        foreignField: '_id',
+                        as: 'driverDetails',
+                    },
+                },
+                {
+                    $match: {
+                        'driverDetails.companyId': new mongoose.Types.ObjectId(companyId),
+                        createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth },
+                    },
+                },
+                {
+                    $group: {
+                        _id: null,
+                        totalExpenses: { $sum: '$amount' },
+                    },
+                },
+            ]);
+    
+            // Tính toán kết quả
+            const totalCurrentMonth = currentMonthExpenses[0]?.totalExpenses || 0;
+            const totalLastMonth = lastMonthExpenses[0]?.totalExpenses || 0;
+    
+            const expenseChange = totalLastMonth
+                ? ((totalCurrentMonth - totalLastMonth) / totalLastMonth) * 100
+                : totalCurrentMonth > 0
+                ? 100
+                : 0;
+    
+            res.status(200).json({
+                success: true,
+                data: {
+                    currentMonth: totalCurrentMonth,
+                    lastMonth: totalLastMonth,
+                    expenseChange: expenseChange.toFixed(2), // Trả về phần trăm thay đổi
+                },
+            });
+        } catch (error) {
+            console.error('Lỗi khi lấy thống kê chi phí:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Đã xảy ra lỗi khi lấy thống kê chi phí.',
+                error: error.message,
+            });
+        }
+    },
+};  
 
 module.exports = companyController;

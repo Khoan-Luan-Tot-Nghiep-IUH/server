@@ -48,8 +48,6 @@ exports.createExpense = async (req, res) => {
         });
     }
 };
-
-
 exports.getDriverExpenses = async (req, res) => {
     try {
         const driverId = req.user._id;
@@ -79,6 +77,7 @@ exports.getDriverExpenses = async (req, res) => {
     }
 };
 
+
 exports.getCompanyExpenses = async (req, res) => {
     try {
         const companyId = req.user.companyId;
@@ -91,13 +90,16 @@ exports.getCompanyExpenses = async (req, res) => {
         }
 
         const expenses = await Expense.find()
-            .populate({
-                path: 'driverId',
-                select: 'name companyId',
-                match: { companyId }
-            })
-            .lean();
-
+        .populate({
+          path: 'driverId',
+          populate: {
+            path: 'userId', 
+            select: 'fullName',
+          },
+          select: 'companyId userId', 
+          match: { companyId }, 
+        })
+        .lean();
         res.status(200).json({
             success: true,
             data: expenses.filter(expense => expense.driverId !== null)

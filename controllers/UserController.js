@@ -11,6 +11,7 @@ const Voucher = require('../models/Voucher');
 const SystemSetting = require('../models/SystemSetting'); 
 const { isStrongPassword } = require('validator');
 const PasswordResetCodeModel = require('../models/passwordResetCodeSchema');
+const { generateNewUserVoucher } = require('./SystemSettingController');
 
 const generateVoucherCode = () => {
     return 'VOUCHER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
@@ -226,7 +227,8 @@ const userRegister = async (req, res) => {
                 discount: 50,
                 expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
                 isUsed: false,
-                type: 'personal'
+                type: 'personal',
+                quantity:1,
             });
             await voucher.save();
 
@@ -280,10 +282,8 @@ const confirmRegistration = async (req, res) => {
             address: tempUser.address,
             birthDay: tempUser.birthDay
         });
-
         await newUser.save();
         await TempUser.deleteOne({ _id: tempUser._id }); // Xóa người dùng tạm dựa trên `_id`
-
         res.status(201).json({ success: true, msg: 'Đăng ký thành công', newUser });
     } catch (error) {
         console.error('Xác nhận đăng ký thất bại:', error);
