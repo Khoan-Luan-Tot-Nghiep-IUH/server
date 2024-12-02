@@ -41,6 +41,9 @@ router.get('/notifications', authMiddleware.verifyToken, authMiddleware.isCompan
 router.get('/bookings', authMiddleware.verifyToken, authMiddleware.isCompanyAdmin, authMiddleware.checkCompanyAccess, companyController.getBookingStatsAndUsers);
 router.get('/revenue/comparison', authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,companyController.getRevenueComparison);
 router.get("/cancelled-stats", authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,companyController.getCancelledBookingsStats);
+router.patch('/bookings/:bookingId/collect-payment', authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,companyController.collectPayment);
+
+router.get('/trips/:tripId/passengers', authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,companyController.getTripPassengers);
 
 // tôi chưa gọi 3 hàm này
 router.get('/export-revenue', authMiddleware.verifyToken, authMiddleware.checkCompanyAccess, companyController.exportRevenueToExcel);

@@ -485,12 +485,12 @@ const companyController = {
           return res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách tài xế.', error: error.message });
         }
      },
+     
     toggleDriverStatus : async (req, res) => {
         try {
             const { userId } = req.params; 
             const companyId = req.user.companyId; 
-    
-            
+
             const user = await User.findById(userId);
             if (!user || user.roleId !== 'driver' || !user.companyId.equals(companyId)) {
                 return res.status(404).json({ success: false, message: 'Người dùng không tồn tại hoặc không phải là tài xế của công ty này.' });
@@ -1461,6 +1461,120 @@ const companyController = {
             });
         }
     },
+    getTripPassengers : async (req, res) => {
+        try {
+            const { tripId } = req.params;
+            const companyId = req.user.companyId; // Lấy companyId từ req.user
+    
+            if (!mongoose.Types.ObjectId.isValid(tripId)) {
+                return res.status(400).json({ success: false, message: 'tripId không hợp lệ.' });
+            }
+    
+            // Tìm chuyến đi thuộc công ty
+            const trip = await Trip.findOne({ _id: tripId, companyId });
+            if (!trip) {
+                return res.status(404).json({ success: false, message: 'Không tìm thấy chuyến đi này.' });
+            }
+    
+            // Lấy danh sách hành khách từ bảng Booking
+            const passengers = await Booking.aggregate([
+                {
+                    $match: {
+                        trip: new mongoose.Types.ObjectId(tripId),
+                        status: { $ne: 'Cancelled' }, // Loại bỏ các booking đã hủy
+                    },
+                },
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: 'user',
+                        foreignField: '_id',
+                        as: 'userDetails',
+                    },
+                },
+                { $unwind: '$userDetails' },
+                {
+                    $project: {
+                        _id: 1,
+                        seatNumbers: 1,
+                        totalPrice: 1,
+                        paymentStatus: 1,
+                        bookingDate: 1,
+                        'userDetails.fullName': 1,
+                        'userDetails.phoneNumber': 1,
+                    },
+                },
+            ]);
+    
+            // Tính tổng số phải thu và đã thu rồi
+            const totalDue = passengers.reduce((sum, p) => sum + p.totalPrice, 0); // Tổng số tiền của tất cả bookings
+            const totalPaid = passengers.reduce(
+                (sum, p) => (p.paymentStatus === 'Paid' ? sum + p.totalPrice : sum),
+                0
+            ); // Tổng số tiền đã thanh toán
+    
+            return res.status(200).json({
+                success: true,
+                message: 'Danh sách hành khách đã được lấy thành công.',
+                data: {
+                    tripId: trip._id,
+                    tripName: trip.name,
+                    departureTime: trip.departureTime,
+                    passengers,
+                    totalDue, // Tổng số phải thu
+                    totalPaid, // Tổng số đã thu
+                    totalUnpaid: totalDue - totalPaid, // Số tiền chưa thu
+                },
+            });
+        } catch (error) {
+            console.error('Lỗi khi lấy danh sách hành khách:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Đã xảy ra lỗi khi lấy danh sách hành khách.',
+                error: error.message,
+            });
+        }
+    }, 
+    collectPayment : async (req, res) => {
+        try {
+            const { bookingId } = req.params;
+    
+            // Find the booking by ID
+            const booking = await Booking.findById(bookingId);
+    
+            if (!booking) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Không tìm thấy thông tin đặt vé.',
+                });
+            }
+    
+            // Check if the payment is already completed
+            if (booking.paymentStatus === 'Paid') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Đặt vé này đã được thanh toán.',
+                });
+            }
+    
+            // Update the payment status
+            booking.paymentStatus = 'Paid';
+            await booking.save();
+    
+            return res.status(200).json({
+                success: true,
+                message: 'Thanh toán đã được thực hiện thành công.',
+                booking,
+            });
+        } catch (error) {
+            console.error('Lỗi khi thu tiền:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Lỗi khi thu tiền.',
+                error: error.message,
+            });
+        }
+    }, 
 };  
 
 module.exports = companyController;
