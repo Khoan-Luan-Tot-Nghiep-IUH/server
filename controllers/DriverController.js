@@ -3,6 +3,86 @@
     const Trip = require('../models/Trip');
     const Booking = require('../models/Booking');
     const Notification = require('../models/Notification');
+    const SalaryRecord = require('../models/SalaryRecord');
+
+    const getDriverSalaryRecords = async (req, res) => {
+        try {
+            const userId = req.user._id; 
+   
+            const driver = await Driver.findOne({ userId });
+            if (!driver) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Không tìm thấy tài xế với userId này.',
+                });
+            }
+
+            const salaryRecords = await SalaryRecord.find({ driverId: driver._id }).sort({ startDate: -1 });
+    
+            if (!salaryRecords || salaryRecords.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Không tìm thấy bảng lương nào cho tài xế này.',
+                });
+            }
+    
+            res.status(200).json({
+                success: true,
+                message: 'Lấy bảng lương tài xế thành công.',
+                data: salaryRecords,
+            });
+        } catch (error) {
+            console.error('Error fetching salary records:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Lỗi khi lấy bảng lương tài xế.',
+                error: error.message,
+            });
+        }
+    };
+  
+    const confirmSalary = async (req, res) => {
+        try {
+            const { salaryRecordId } = req.params;
+    
+            // Tìm tài xế dựa trên userId
+            const driver = await Driver.findOne({ userId: req.user._id });
+            if (!driver) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Không tìm thấy tài xế với userId này.',
+                });
+            }
+    
+            // Xác minh và cập nhật bản ghi lương
+            const updatedRecord = await SalaryRecord.findOneAndUpdate(
+                { _id: salaryRecordId, driverId: driver._id }, // So khớp driverId
+                { confirm: true },
+                { new: true }
+            );
+    
+            if (!updatedRecord) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Không tìm thấy bảng lương hoặc bạn không có quyền xác nhận bảng lương này.',
+                });
+            }
+    
+            return res.status(200).json({
+                success: true,
+                message: 'Xác nhận bảng lương thành công.',
+                data: updatedRecord,
+            });
+        } catch (error) {
+            console.error('Error confirming salary record:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Lỗi khi xác nhận bảng lương.',
+                error: error.message,
+            });
+        }
+    };
+    
 
     const getDriverTrips = async (req, res) => {
         try {
@@ -312,5 +392,7 @@
         checkInPassenger,
         reportTripIssue,
         updateDriverInfo,
-        getCompletedTripCount 
+        getCompletedTripCount,
+        getDriverSalaryRecords,
+        confirmSalary 
     };

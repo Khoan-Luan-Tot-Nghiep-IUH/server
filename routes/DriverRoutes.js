@@ -4,6 +4,10 @@ const driverController = require('../controllers/DriverController');
 const authMiddleware = require('../middleware/authMiddleware');
 const ExpenseController = require('../controllers/ExpenseController')
 
+
+router.get('/driver/salary-records', authMiddleware.verifyToken,authMiddleware.isDriver,driverController.getDriverSalaryRecords);
+router.put('/driver/salary-records/:salaryRecordId/confirm', authMiddleware.verifyToken,authMiddleware.isDriver,driverController.confirmSalary);
+
 //tạo phiếu chi phí cho tài xế 
 router.post('/driver/expenses',authMiddleware.verifyToken,authMiddleware.isDriver,ExpenseController.createExpense);
 router.get('/driver/expenses',authMiddleware.verifyToken,authMiddleware.isDriver,ExpenseController.getDriverExpenses);

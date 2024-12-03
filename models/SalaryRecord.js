@@ -33,7 +33,11 @@ const SalaryRecordSchema = new mongoose.Schema({
     deductions: { 
         type: Number, 
         default: 0 
-    } // Khoản khấu trừ (nếu có)
+    },
+    confirm: { 
+        type: Boolean, 
+        default: false 
+    }, // Khoản khấu trừ (nếu có)
 }, { timestamps: true });
 
 const SalaryRecord = mongoose.model('SalaryRecord', SalaryRecordSchema);
