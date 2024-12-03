@@ -368,8 +368,6 @@ exports.rejectTripRequest = async (req, res) => {
     }
 };
 
-
-
 exports.getCompanyNames = async (req, res) => {
     try {
         const companies = await Company.find({ isActive: true }).select('name _id').lean();

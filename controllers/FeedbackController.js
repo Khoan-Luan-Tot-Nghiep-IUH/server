@@ -6,45 +6,55 @@ const { uploadImage } = require('../config/cloudinaryConfig');
 const User = require('../models/User');
 const Feedback = require('../models/Feedback');
 
+
 exports.createCompanyFeedback = async (req, res) => {
   const { companyId, rating, comment } = req.body;
   const userId = req.user._id;
 
   try {
-    const userBooking = await Booking.findOne({
-      user: userId,
-    }).populate('trip');
+    // Lấy tất cả Booking của người dùng
+    const userBookings = await Booking.find({ user: userId }).populate('trip');
 
-    if (!userBooking) {
+    if (!userBookings || userBookings.length === 0) {
       return res.status(403).json({
-        error: 'Bạn chỉ có thể đánh giá công ty mà bạn đã đặt vé trước đó!',
+        success: false,
+        message: 'Bạn chưa đặt vé nào trong hệ thống!',
       });
     }
 
-    const trip = await Trip.findOne({
-      _id: userBooking.trip._id,
-      companyId,
-      status: 'Completed',
-    });
+    // Kiểm tra xem có booking nào liên kết với companyId hay không
+    const bookingWithCompany = userBookings.find(
+      (booking) => booking.trip && booking.trip.companyId.toString() === companyId
+    );
 
-    if (!trip) {
+    if (!bookingWithCompany) {
       return res.status(403).json({
-        error: 'Bạn chỉ có thể đánh giá sau khi hoàn thành chuyến đi!',
+        success: false,
+        message: 'Bạn chỉ có thể đánh giá công ty mà bạn đã đặt vé trước đó!',
       });
     }
 
+    // Tạo danh sách ảnh nếu có
     let images = [];
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        const uploadedImage = await uploadImage(file.path, 'feedback_images');
-        images.push({ url: uploadedImage.url });
+        try {
+          const uploadedImage = await uploadImage(file.path, 'feedback_images');
+          images.push({ url: uploadedImage.url });
+        } catch (error) {
+          console.error(`Error uploading image: ${file.originalname}`, error.message);
+          return res.status(500).json({
+            success: false,
+            message: `Lỗi khi tải hình ảnh: ${file.originalname}`,
+          });
+        }
       }
     }
 
-    const user = await User.findById(userId);
+    // Tạo mới feedback
     const feedback = new Feedback({
       companyId,
-      trip: userBooking.trip._id,
+      trip: bookingWithCompany.trip._id, // Trip từ booking liên kết với companyId
       user: userId,
       rating,
       comment,
@@ -53,11 +63,12 @@ exports.createCompanyFeedback = async (req, res) => {
 
     await feedback.save();
 
+    // Cập nhật thông tin feedback cho công ty
     const company = await Company.findById(companyId);
     if (company) {
       company.feedbacks.push({
-        userId: user._id,
-        fullName: user.fullName,
+        userId,
+        fullName: req.user.fullName,
         rating,
         comment,
         createdAt: feedback.createdAt,
@@ -66,20 +77,25 @@ exports.createCompanyFeedback = async (req, res) => {
       await updateCompanyRating(companyId);
     }
 
+    // Cộng điểm loyalty cho user
+    const user = await User.findById(userId);
     if (user) {
       user.loyaltyPoints += 10;
       await user.save();
     }
 
     res.status(201).json({
+      success: true,
       message: 'Đánh giá của bạn đã được ghi nhận thành công!',
       loyaltyPoints: user ? user.loyaltyPoints : null,
       feedback,
     });
   } catch (error) {
-    console.error(`Error creating feedback for company ${companyId}:`, error.message);
+    console.error(`Error creating feedback:`, error);
     res.status(500).json({
-      error: 'Hệ thống gặp lỗi. Không thể ghi nhận đánh giá của bạn. Vui lòng thử lại!',
+      success: false,
+      message: 'Hệ thống gặp lỗi. Không thể ghi nhận đánh giá của bạn!',
+      error: error.message,
     });
   }
 };
@@ -107,3 +123,49 @@ async function updateCompanyRating(companyId) {
     console.error(`Error updating average rating for company ${companyId}:`, error.message);
   }
 }
+
+
+exports.getCompanyFeedbacks = async (req, res) => {
+  try {
+    const companyId = req.user.companyId; // Lấy companyId từ req.user
+
+    if (!companyId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn không có quyền truy cập vào công ty này.',
+      });
+    }
+
+    const page = parseInt(req.query.page) || 1; 
+    const limit = parseInt(req.query.limit) || 10; 
+    const skip = (page - 1) * limit;
+
+    const totalFeedbacks = await Feedback.countDocuments({ companyId });
+
+    const feedbacks = await Feedback.find({ companyId })
+      .populate('user', 'fullName')
+      .populate('trip', 'departure destination startTime')
+      .sort({ createdAt: -1 }) 
+      .skip(skip)
+      .limit(limit);
+
+    res.status(200).json({
+      success: true,
+      message: 'Lấy danh sách đánh giá thành công.',
+      feedbacks,
+      pagination: {
+        totalFeedbacks,
+        currentPage: page,
+        totalPages: Math.ceil(totalFeedbacks / limit),
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching company feedbacks:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Hệ thống gặp lỗi khi lấy danh sách đánh giá. Vui lòng thử lại sau!',
+    });
+  }
+};
+
+
