@@ -5,6 +5,11 @@ const authMiddleware = require('../middleware/authMiddleware');
 const userV2Controller = require('../controllers/userV2Controller');
 const ExpenseController = require('../controllers/ExpenseController')
 
+
+
+router.get('/most-booked-route',authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,companyController.getMostBookedRoutes);
+
+
 // Cập nhật trạng thái phiếu chi phí
 router.get('/expenses',authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,ExpenseController.getCompanyExpenses);
 router.patch('/expenses/:expenseId/status',authMiddleware.verifyToken,authMiddleware.isCompanyAdmin,authMiddleware.checkCompanyAccess,ExpenseController.updateExpenseStatus);

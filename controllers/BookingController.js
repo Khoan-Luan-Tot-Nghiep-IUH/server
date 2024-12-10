@@ -162,8 +162,6 @@ function generateOrderCode(bookingId) {
     const orderCode = parseInt(hash.slice(0, 8), 16);
     return Math.abs(orderCode);
 }
-
-
 exports.createBooking = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();

@@ -580,7 +580,8 @@ const companyController = {
             console.error('Error calculating salary:', error);
             return res.status(500).json({ success: false, message: 'Lỗi khi tính lương cho tài xế.', error: error.message });
         }
-    },    
+    },
+        
     getCompletedTripsByMonth: async (req, res) => {
         try {
             const companyId = req.user.companyId; 
@@ -1575,6 +1576,95 @@ const companyController = {
             });
         }
     }, 
+    getMostBookedRoutes : async (req, res) => {
+        try {
+            const companyId = req.user.companyId; // Lấy companyId từ người dùng đăng nhập
+    
+            const rankedRoutes = await Booking.aggregate([
+                // Ghép bảng Trip để lấy thông tin chuyến đi
+                {
+                    $lookup: {
+                        from: "trips",
+                        localField: "trip",
+                        foreignField: "_id",
+                        as: "tripDetails",
+                    },
+                },
+                { $unwind: "$tripDetails" },
+    
+                // Lọc dữ liệu liên quan đến công ty và loại bỏ booking đã hủy
+                {
+                    $match: {
+                        "tripDetails.companyId": new mongoose.Types.ObjectId(companyId),
+                        status: { $ne: "Cancelled" }, // Loại bỏ booking đã hủy
+                    },
+                },
+    
+                // Nhóm dữ liệu theo tuyến đường
+                {
+                    $group: {
+                        _id: {
+                            route: {
+                                departure: "$tripDetails.departureLocation",
+                                arrival: "$tripDetails.arrivalLocation",
+                            },
+                        },
+                        totalBookings: { $sum: 1 }, // Tổng số lượt đặt vé
+                        totalSeatsBooked: { $sum: { $size: "$seatNumbers" } }, // Tổng số ghế đã đặt
+                    },
+                },
+    
+                // Sắp xếp theo số lượng ghế đặt giảm dần
+                {
+                    $sort: { totalSeatsBooked: -1 },
+                },
+    
+                // Ghép thêm thông tin địa điểm
+                {
+                    $lookup: {
+                        from: "locations",
+                        localField: "_id.route.departure",
+                        foreignField: "_id",
+                        as: "departureDetails",
+                    },
+                },
+                {
+                    $lookup: {
+                        from: "locations",
+                        localField: "_id.route.arrival",
+                        foreignField: "_id",
+                        as: "arrivalDetails",
+                    },
+                },
+    
+                // Định dạng kết quả
+                {
+                    $project: {
+                        route: {
+                            departure: { $arrayElemAt: ["$departureDetails.name", 0] },
+                            arrival: { $arrayElemAt: ["$arrivalDetails.name", 0] },
+                        },
+                        totalBookings: 1,
+                        totalSeatsBooked: 1,
+                    },
+                },
+            ]);
+    
+            // Trả về kết quả
+            res.status(200).json({
+                success: true,
+                message: "Xếp hạng các tuyến đường theo số lượng vé đặt.",
+                data: rankedRoutes,
+            });
+        } catch (error) {
+            console.error("Lỗi khi thống kê tuyến đường:", error);
+            res.status(500).json({
+                success: false,
+                message: "Lỗi khi thống kê tuyến đường theo số lượng vé đặt.",
+                error: error.message,
+            });
+        }
+    },
 };  
 
 module.exports = companyController;

@@ -87,11 +87,11 @@ app.use('/api/',GlobalNotification)
 
 
 
-
 const systemSettingRoutes = require('./routes/systemSettingRoutes');
 app.use('/api/system-settings', systemSettingRoutes);
 const faqRoutes = require('./routes/FaqRoutes');
-app.use('/api/faqs', faqRoutes);
+app.use('/api/faq', faqRoutes);
+
 
 io.on('connection', (socket) => {
     console.log('A user connected');

@@ -1,0 +1,28 @@
+import pandas as pd
+from pymongo import MongoClient
+
+# Kết nối MongoDB
+client = MongoClient("mongodb+srv://KhoaLuan:DepTraiSo1@khoaluantotnghiep.ibxma.mongodb.net/KhoaLuan?retryWrites=true&w=majority")
+db = client.KhoaLuan
+
+# Lấy dữ liệu từ MongoDB
+bookings = pd.DataFrame(list(db.bookings.find()))
+trips = pd.DataFrame(list(db.trips.find()))
+locations = pd.DataFrame(list(db.locations.find()))
+
+# Kết hợp bảng bookings với trips
+data = bookings.merge(trips, left_on="trip", right_on="_id")
+
+# Lấy tên địa điểm
+data = data.merge(locations, left_on="departureLocation", right_on="_id", suffixes=("", "_departure"))
+data = data.merge(locations, left_on="arrivalLocation", right_on="_id", suffixes=("", "_arrival"))
+
+# Chỉ giữ các trường cần thiết
+data = data[["name_departure", "name_arrival", "bookingDate", "_id"]]
+data.rename(columns={"name_departure": "departureLocation", "name_arrival": "arrivalLocation"}, inplace=True)
+
+# Nhóm dữ liệu theo ngày và tuyến
+grouped_data = data.groupby(["departureLocation", "arrivalLocation", "bookingDate"]).size().reset_index(name="bookingCount")
+
+# Xuất dữ liệu để huấn luyện
+grouped_data.to_csv("booking_data.csv", index=False)

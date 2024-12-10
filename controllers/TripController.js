@@ -44,18 +44,19 @@ exports.createTrip = async (req, res) => {
             basePrice,
             isRoundTrip,
             driverIds,
-            pickupPoints, // Danh sách điểm đón
-            dropOffPoints // Danh sách điểm trả
+            pickupPoints,
+            dropOffPoints,
         } = req.body;
 
         const { companyId } = req.user;
 
-        // Kiểm tra thông tin cơ bản
+        // Kiểm tra thông tin công ty
         const company = await Company.findById(companyId);
         if (!company) {
             return res.status(404).json({ success: false, message: 'Công ty không tồn tại.' });
         }
 
+        // Kiểm tra thông tin địa điểm và loại xe
         const departureLoc = await Location.findById(departureLocation);
         const arrivalLoc = await Location.findById(arrivalLocation);
         const busTypeInfo = await BusType.findById(busType);
@@ -65,7 +66,7 @@ exports.createTrip = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid location or bus type' });
         }
 
-        // Kiểm tra thời gian hợp lệ
+        // Kiểm tra thời gian
         const departureTimeUTC = moment.tz(departureTime, 'Asia/Ho_Chi_Minh').utc().toDate();
         const arrivalTimeUTC = moment.tz(arrivalTime, 'Asia/Ho_Chi_Minh').utc().toDate();
 
@@ -85,54 +86,74 @@ exports.createTrip = async (req, res) => {
             companyId,
             drivers: driverIds,
             isRoundTrip: isRoundTrip || false,
-            pickupPoints, // Lưu danh sách điểm đón
-            dropOffPoints // Lưu danh sách điểm trả
+            pickupPoints,
+            dropOffPoints,
         });
 
         await newTrip.save();
 
-        // Tạo danh sách ghế ngồi
+        // Tạo danh sách ghế
         const seats = [];
         const totalSeats = busTypeInfo.seats;
         const floors = busTypeInfo.floorCount || 1;
-        const rows = ['Front', 'Middle', 'Back'];
+
         let seatNumber = 1;
-
         for (let floor = 1; floor <= floors; floor++) {
-            for (let row of rows) {
-                const seatsInRow = Math.ceil(totalSeats / (floors * rows.length));
-                for (let i = 0; i < seatsInRow; i++) {
-                    if (seatNumber > totalSeats) break;
+            const frontSeats = 6; 
+            const middleSeats = 6; 
+            const backSeats = totalSeats / floors - frontSeats - middleSeats; // Ghế còn lại cho Hàng Cuối
 
-                    let seatPrice = basePrice;
-                    let isAvailable = true;
-                    let isVIP = false;
+            // Đảm bảo số ghế hàng Cuối không âm
+            if (backSeats < 0) {
+                throw new Error('Số ghế không hợp lệ, vui lòng kiểm tra loại xe.');
+            }
 
-                    if (seatNumber === 1) {
-                        isAvailable = false;
-                    }
+            // Xử lý Hàng Đầu
+            for (let i = 0; i < frontSeats; i++) {
+                if (seatNumber > totalSeats) break;
+                seats.push({
+                    trip: newTrip._id,
+                    seatNumber: seatNumber++,
+                    isAvailable: seatNumber !== 1, // Ghế số 1 không khả dụng
+                    isVIP: seatNumber >= 2 && seatNumber <= 6, // Ghế VIP
+                    price: seatNumber >= 2 && seatNumber <= 6 ? basePrice * 1.5 : basePrice,
+                    seatRow: 'Front',
+                    floor: floor,
+                });
+            }
 
-                    if ([2, 3, 4, 5, 6].includes(seatNumber)) {
-                        isVIP = true;
-                        seatPrice = basePrice * 1.5;
-                    }
+            // Xử lý Hàng Giữa
+            for (let i = 0; i < middleSeats; i++) {
+                if (seatNumber > totalSeats) break;
+                seats.push({
+                    trip: newTrip._id,
+                    seatNumber: seatNumber++,
+                    isAvailable: true,
+                    isVIP: false,
+                    price: basePrice,
+                    seatRow: 'Middle',
+                    floor: floor,
+                });
+            }
 
-                    seats.push({
-                        trip: newTrip._id,
-                        seatNumber: seatNumber++,
-                        isAvailable: isAvailable,
-                        isVIP: isVIP,
-                        price: seatPrice,
-                        seatRow: row,
-                        floor: floor
-                    });
-                }
+            // Xử lý Hàng Cuối
+            for (let i = 0; i < backSeats; i++) {
+                if (seatNumber > totalSeats) break;
+                seats.push({
+                    trip: newTrip._id,
+                    seatNumber: seatNumber++,
+                    isAvailable: true,
+                    isVIP: false,
+                    price: basePrice,
+                    seatRow: 'Back',
+                    floor: floor,
+                });
             }
         }
 
         await Seat.insertMany(seats);
 
-        // Nếu là chuyến đi khứ hồi, tạo chuyến đi về
+        // Xử lý chuyến đi khứ hồi
         let returnTrip = null;
         if (isRoundTrip) {
             const returnDepartureTime = moment(arrivalTimeUTC).add(1, 'hours').toDate();
@@ -148,9 +169,9 @@ exports.createTrip = async (req, res) => {
                 basePrice,
                 companyId,
                 isRoundTrip: false,
-                pickupPoints: dropOffPoints, // Điểm trả của chuyến đi thành điểm đón của chuyến về
-                dropOffPoints: pickupPoints, // Điểm đón của chuyến đi thành điểm trả của chuyến về
-                returnTripId: newTrip._id
+                pickupPoints: dropOffPoints,
+                dropOffPoints: pickupPoints,
+                returnTripId: newTrip._id,
             });
 
             await returnTrip.save();
@@ -163,21 +184,20 @@ exports.createTrip = async (req, res) => {
             seatNumber = 1;
 
             for (let floor = 1; floor <= floors; floor++) {
-                for (let row of rows) {
-                    const seatsInRow = Math.ceil(totalSeats / (floors * rows.length));
-                    for (let i = 0; i < seatsInRow; i++) {
-                        if (seatNumber > totalSeats) break;
-
-                        let seatPrice = basePrice;
-                        returnSeats.push({
-                            trip: returnTrip._id,
-                            seatNumber: seatNumber++,
-                            isAvailable: true,
-                            price: seatPrice,
-                            seatRow: row,
-                            floor: floor
-                        });
-                    }
+                for (let i = 0; i < totalSeats / floors; i++) {
+                    returnSeats.push({
+                        trip: returnTrip._id,
+                        seatNumber: seatNumber++,
+                        isAvailable: true,
+                        isVIP: false,
+                        price: basePrice,
+                        seatRow: i < frontSeats
+                            ? 'Front'
+                            : i < frontSeats + middleSeats
+                            ? 'Middle'
+                            : 'Back',
+                        floor: floor,
+                    });
                 }
             }
 
@@ -306,8 +326,8 @@ exports.getTripsByCompany = async (req, res) => {
                 model: 'User',
                 select: 'fullName phoneNumber email role',
                 match: { role: 'driver' }
-            });
-            
+            })
+            .sort({ departureDate: -1 });
             
 
         // Trả về danh sách chuyến đi

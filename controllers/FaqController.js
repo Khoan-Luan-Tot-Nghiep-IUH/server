@@ -14,20 +14,16 @@ exports.getRootQuestions = async (req, res) => {
   }
 };
 
-// Lấy câu hỏi theo ID và các câu trả lời tiếp theo nếu có
 exports.getQuestionById = async (req, res) => {
   const { id } = req.params;
   try {
-    // Tìm câu hỏi theo ID và populate các câu hỏi tiếp theo trong answers
     const question = await FAQ.findById(id).populate('answers.nextQuestionId', 'question answers');
     if (!question) {
-      return res.status(404).json({ success: false, message: "Câu hỏi không tồn tại." });
+      return res.status(404).json({ success: false, message: 'Câu hỏi không tồn tại.' });
     }
-
     res.status(200).json({
       success: true,
       data: question,
-      message: "Chi tiết câu hỏi đã được lấy thành công"
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
