@@ -185,22 +185,24 @@ exports.createBooking = async (req, res) => {
 
       let discountAmount = 0;
       if (voucherCode) {
-        const voucher = await Voucher.findOne({ code: voucherCode, userId, isUsed: false });
+        const voucher = await Voucher.findOne({ code: voucherCode, userId, isUsed: false }).session(session);
         if (!voucher) {
-          throw new Error('Voucher không tồn tại, đã hết hạn hoặc đã được sử dụng');
+          console.log('Voucher không hợp lệ:', voucherCode);
+          await session.abortTransaction();
+          return res.status(400).json({ success: false, message: 'Voucher không tồn tại hoặc đã được sử dụng.' });
         }
+        
         discountAmount = voucher.discount;
+        
         if (voucher.quantity <= 1) {
           await Voucher.deleteOne({ _id: voucher._id }).session(session);
         } else {
           voucher.quantity -= 1;
+          voucher.isUsed = true;
           await voucher.save({ session });
         }
-        voucher.isUsed = true;
-        await voucher.save({ session });
       }
-      
-
+    
       
       const seats = await Seat.find({
         trip: bookingDraft.trip,
