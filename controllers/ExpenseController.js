@@ -94,19 +94,27 @@ exports.getCompanyExpenses = async (req, res) => {
         }
 
         const expenses = await Expense.find()
-        .populate({
-          path: 'driverId',
-          populate: {
-            path: 'userId', 
-            select: 'fullName',
-          },
-          select: 'companyId userId', 
-          match: { companyId }, 
-        })
-        .lean();
+            .populate({
+                path: 'driverId',
+                populate: {
+                    path: 'userId', 
+                    select: 'fullName',
+                },
+                select: 'companyId userId', 
+                match: { companyId }, 
+            })
+            .lean();
+
+        let filteredExpenses = expenses.filter(expense => expense.driverId !== null);
+        filteredExpenses.sort((a, b) => {
+            const aPending = a.status === 'Pending' ? 0 : 1;
+            const bPending = b.status === 'Pending' ? 0 : 1;
+            return aPending - bPending;
+        });
+
         res.status(200).json({
             success: true,
-            data: expenses.filter(expense => expense.driverId !== null)
+            data: filteredExpenses
         });
     } catch (error) {
         res.status(500).json({
@@ -116,6 +124,7 @@ exports.getCompanyExpenses = async (req, res) => {
         });
     }
 };
+
 
 exports.updateExpenseStatus = async (req, res) => {
     try {

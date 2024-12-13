@@ -192,7 +192,7 @@ exports.createBooking = async (req, res) => {
           return res.status(400).json({ success: false, message: 'Voucher không tồn tại hoặc đã được sử dụng.' });
         }
         
-        discountAmount = voucher.discount;
+        discountAmount = voucher.discount;  
         
         if (voucher.quantity <= 1) {
           await Voucher.deleteOne({ _id: voucher._id }).session(session);

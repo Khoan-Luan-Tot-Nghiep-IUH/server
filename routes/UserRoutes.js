@@ -190,5 +190,7 @@ router.get('/superadmin', (req, res) => {
 router.get('/getLastLoginUser',authMiddleware.verifyToken,authMiddleware.isSuperAdmin,userController.getAllUsersByLastLogin);
 router.get('/requests', authMiddleware.verifyToken,authMiddleware.isSuperAdmin, userV2Controller.getCompanyRequests);
 router.patch('/requests/update', authMiddleware.verifyToken,authMiddleware.isSuperAdmin, userV2Controller.updateCompanyRequest);
+router.get('/stats/online-payments', authMiddleware.verifyToken,authMiddleware.isSuperAdmin, userV2Controller.getOnlinePaymentsStats);
+
 
 module.exports = router;

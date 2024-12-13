@@ -9,6 +9,7 @@ const BusType = require('../models/BusType');
 const moment = require('moment-timezone');
 const Seat = require('../models/Seat'); 
 const Trip = require('../models/Trip');
+const Booking = require('../models/Booking');
 
 
 // mở + lấy + hủy yêu cầu chuyến đi gửi đến công ty
@@ -661,4 +662,47 @@ exports.updateCompanyRequest = async (req, res) => {
             error: error.message
         });
     }
+};
+
+
+
+exports.getOnlinePaymentsStats = async (req, res) => {
+    try {
+        const results = await Booking.aggregate([
+          { 
+            $match: { paymentMethod: "Online" } 
+          },
+          {
+            $lookup: {
+              from: "trips",            // Tên collection của trip trong MongoDB
+              localField: "trip",       // trường trong bookings
+              foreignField: "_id",      // trường _id của trip
+              as: "tripInfo"
+            }
+          },
+          { $unwind: "$tripInfo" },
+          {
+            $group: {
+              _id: "$tripInfo.companyId",
+              totalOnline: { $sum: "$totalPrice" }
+            }
+          },
+          { $sort: { totalOnline: -1 } } // tùy chọn, sắp xếp giảm dần theo tổng tiền
+        ]);
+    
+        // results sẽ có dạng: [{ _id: companyId, totalOnline: xxx }, ...]
+        res.status(200).json({
+          success: true,
+          data: results.map(r => ({
+            companyId: r._id,
+            totalOnline: r.totalOnline
+          }))
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: 'Lỗi khi thống kê số tiền thanh toán Online theo công ty.',
+          error: error.message
+        });
+      }
 };
